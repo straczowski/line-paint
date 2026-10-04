@@ -50,8 +50,10 @@ npm install
 npm run dev
 npm run build
 npm run lint
+npm run format
+npm run format:check
 npm test
 npm run preview
 ```
 
-`npm run dev` serves the app at `http://localhost:5173`. `npm run lint` runs Oxlint, which ships with the Vite template. `npm test` runs Vitest once.
+`npm run dev` serves the app at `http://localhost:5173`. `npm run lint` runs Oxlint, which ships with the Vite template. `npm run format` rewrites TypeScript, TSX, CSS, and `index.html` with Prettier. `npm run format:check` exits non-zero when one of those files does not match. `npm test` runs Vitest once.
