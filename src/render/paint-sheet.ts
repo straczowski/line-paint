@@ -23,7 +23,8 @@ export function paintStaticCanvas(input: PaintStaticCanvasInput): void {
 }
 
 export function paintOverlay(input: PaintOverlayInput): void {
-  const { context, draftPoints, preview, bounds, marquee, fit, size } = input
+  const { context, draftPoints, preview, bounds, marquee, handles, fit, size } =
+    input
   matchCanvasSize(context, size)
   clearOverlay(context, size)
   paintStroke(context, {
@@ -46,6 +47,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
   if (marquee) {
     strokeMarquee(context, { ...marquee, fit })
   }
+  paintHandles(context, handles, fit)
 }
 
 function matchCanvasSize(
@@ -110,6 +112,40 @@ function strokeSelectionBounds(
     bottomRight.x - topLeft.x,
     bottomRight.y - topLeft.y,
   )
+}
+
+function paintHandles(
+  context: CanvasRenderingContext2D,
+  handles: readonly Handle[],
+  fit: SheetFit,
+): void {
+  for (const handle of handles) {
+    if (!handle.selected) {
+      paintHandle(context, handle, fit)
+    }
+  }
+  for (const handle of handles) {
+    if (handle.selected) {
+      paintHandle(context, handle, fit)
+    }
+  }
+}
+
+const handleRadiusPx = 4
+
+function paintHandle(
+  context: CanvasRenderingContext2D,
+  handle: Handle,
+  fit: SheetFit,
+): void {
+  const center = scenePointToCanvas(handle.point, fit)
+  context.beginPath()
+  context.arc(center.x, center.y, handleRadiusPx, 0, Math.PI * 2)
+  context.fillStyle = handle.selected ? selectionColor : canvasWhite
+  context.strokeStyle = selectionColor
+  context.lineWidth = 1
+  context.fill()
+  context.stroke()
 }
 
 function strokeMarquee(
@@ -217,8 +253,14 @@ type PaintOverlayInput = {
   preview: readonly SelectionStroke[]
   bounds: SelectionBounds | undefined
   marquee: Marquee | undefined
+  handles: readonly Handle[]
   fit: SheetFit
   size: WindowSize
+}
+
+type Handle = {
+  point: Point
+  selected: boolean
 }
 
 type SelectionStroke = {

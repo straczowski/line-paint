@@ -6,7 +6,7 @@ A person can change the points of one polyline from 0004.
 
 While Select is active, a double-click on a polyline selects that polyline and edits its points. The overlay shows a handle on each point. A click on a handle selects that point. A click on another polyline selects it as a whole object and leaves point editing. A click on empty canvas clears the selection and leaves point editing.
 
-Dragging a handle moves that point. The same rule as a move: the new position is overlay state until the pointer goes up, then the scene point updates. A point may land outside the sheet.
+Dragging a handle moves that point. The new position is overlay state until the pointer goes up, then the scene point updates. While that drag is in progress, the static canvas omits that one polyline. The overlay draws it in `#1e1e1e` at its stored width, with the dragged point at the new position, plus the handles and the selection rectangle. Only that overlay line is visible, so the segments meet the new point. On release, the static canvas draws the committed polyline. A point may land outside the sheet.
 
 Backspace deletes the selected point. If no handle is selected, Backspace does nothing. If fewer than two points would remain, the polyline is removed, the selection clears, and point editing ends. After a delete that leaves two or more points, point editing stays on and no handle is selected.
 
@@ -25,7 +25,7 @@ CONCEPT.md says double-click edits points, a point can be dragged, and Backspace
 
 CONCEPT.md does not bind Backspace to the whole object, and it does not mention the Delete key. A key that deletes the polyline is a different command. Backspace with no handle selected does nothing, so a stray key does not remove the drawing.
 
-ARCHITECTURE.md keeps pointer moves off the static canvas. The dragged point is overlay state until release, same as a selection move.
+ARCHITECTURE.md keeps pointer moves off the static canvas. The scene point still changes only on release. Leaving the previous polyline underneath the overlay would show the old segments and the new ones together. The static canvas drops that one polyline when the drag starts and paints it again after release. That is one redraw at the start, not a redraw of every stroke on each move. Dragging a selected polyline by its stroke, not a handle, still leaves the previous points on the static canvas until release. That is 0004.
 
 How point editing ends is open in the docs. A click on empty canvas already clears the selection in 0004. That click is also the exit here. A second mode flag that survived a cleared selection would leave handles on nothing.
 
@@ -34,7 +34,7 @@ A handle hit wins over a segment hit. Otherwise a click on a vertex starts an ob
 ## Done when
 
 - Double-click while Select is active shows a handle on each point of that polyline.
-- Dragging a handle updates that point in the scene on release. During the drag, the static canvas keeps the previous point.
+- Dragging a handle updates that point in the scene on release. During the drag, the static canvas omits that polyline and the overlay line meets only the new point.
 - Backspace deletes the selected handle's point. With no handle selected, the scene stays as it is.
 - Deleting down to fewer than two points removes the polyline and clears the selection.
 - A click on empty canvas clears the selection and removes the handles.

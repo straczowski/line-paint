@@ -21,7 +21,7 @@ When several polylines are selected, the overlay draws each in `#6965db`, using 
 
 Hit testing uses a 3 mm slop around the stroke, so a `0.3` mm line can be clicked. The slop is in scene millimeters.
 
-Switching from Polyline to Select drops an in-progress preview and does not commit it. The hint from 0003 shows only while Polyline is active, the scene is empty, and no point is in progress.
+Switching from Polyline to Select drops an in-progress preview and does not commit it. Switching from Select to Polyline clears the selection, so the rectangle and any point handles disappear. The hint from 0003 shows only while Polyline is active, the scene is empty, and no point is in progress.
 
 ## Out of scope
 
@@ -59,5 +59,5 @@ Groups are in CONCEPT.md and are not this gesture. A group type, or a selection 
 - The stored stroke stays `#1e1e1e`. One selected polyline shows one `#6965db` rectangle around its points, outset by 2 mm, and no blue retrace. A horizontal polyline still shows a rectangle with height. Several selected polylines are still drawn in `#6965db`.
 - A click in the empty inside of that rectangle does not select or move the polyline. A click on the stroke still does.
 - Dragging one selected polyline moves it on release. During the drag, the overlay shows that line and the rectangle at the new position, and the static canvas keeps the previous points.
-- With Polyline active, a click still adds a point, and switching to Select drops an unfinished preview.
+- With Polyline active, a click still adds a point, and switching to Select drops an unfinished preview. Switching back to Polyline clears the selection and removes the rectangle.
 - Tests cover hit testing with the 3 mm slop, marquee touch, translation, the 2 mm outset on a flat polyline, and that the empty inside of the rectangle is not a hit. `npm test` and `npm run build` succeed.

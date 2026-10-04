@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Point, Polyline } from './polyline'
 import {
+  deletePolylinePoint,
+  movePolylinePoint,
+  pointerTarget,
   polylineAt,
   selectionBounds,
   touchedPolylineIds,
@@ -131,6 +134,73 @@ describe('selectionBounds', () => {
 
   it('returns nothing when there are no points', () => {
     expect(selectionBounds([])).toBeUndefined()
+  })
+})
+
+describe('pointerTarget', () => {
+  const line = stroke('line', [point(0, 0), point(40, 0)])
+
+  it('prefers a point handle over the segment while that polyline is edited', () => {
+    expect(pointerTarget([line], point(0, 2), 'line')).toEqual({
+      id: 'line',
+      pointIndex: 0,
+    })
+    expect(pointerTarget([line], point(20, 2), 'line')).toEqual({
+      id: 'line',
+      pointIndex: undefined,
+    })
+    expect(pointerTarget([line], point(0, 3.1), 'line')).toEqual({
+      id: undefined,
+      pointIndex: undefined,
+    })
+  })
+
+  it('hits the segment when points are not being edited', () => {
+    expect(pointerTarget([line], point(0, 2), undefined)).toEqual({
+      id: 'line',
+      pointIndex: undefined,
+    })
+  })
+})
+
+describe('movePolylinePoint', () => {
+  it('moves one point and keeps the stroke', () => {
+    const scene = [
+      stroke('edit', [point(0, 0), point(10, 0), point(10, 10)]),
+      stroke('stay', [point(5, 5), point(6, 6)]),
+    ]
+    const next = movePolylinePoint(scene, {
+      id: 'edit',
+      index: 1,
+      point: point(-4, 30),
+    })
+
+    expect(next[0]?.points).toEqual([point(0, 0), point(-4, 30), point(10, 10)])
+    expect(next[0]?.stroke).toBe('#1e1e1e')
+    expect(next[1]).toBe(scene[1])
+    expect(scene[0]?.points[1]).toEqual(point(10, 0))
+  })
+})
+
+describe('deletePolylinePoint', () => {
+  it('deletes the chosen point and leaves the rest', () => {
+    const scene = [stroke('edit', [point(0, 0), point(10, 0), point(10, 10)])]
+
+    expect(
+      deletePolylinePoint(scene, { id: 'edit', index: 1 })[0]?.points,
+    ).toEqual([point(0, 0), point(10, 10)])
+    expect(scene[0]?.points).toHaveLength(3)
+  })
+
+  it('removes the polyline when fewer than two points would remain', () => {
+    const scene = [
+      stroke('edit', [point(0, 0), point(10, 0)]),
+      stroke('stay', [point(1, 1), point(2, 2)]),
+    ]
+    const next = deletePolylinePoint(scene, { id: 'edit', index: 0 })
+
+    expect(next).toHaveLength(1)
+    expect(next[0]).toBe(scene[1])
   })
 })
 

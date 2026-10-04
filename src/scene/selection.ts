@@ -54,6 +54,101 @@ export function translatePolylines(
   return moved ? next : scene
 }
 
+export function pointerTarget(
+  scene: readonly Polyline[],
+  point: Point,
+  editingId: string | undefined,
+): PointerTarget {
+  const editing = editingId
+    ? scene.find((polyline) => polyline.id === editingId)
+    : undefined
+  if (editing) {
+    const pointIndex = pointIndexAt(editing, point)
+    if (pointIndex !== undefined) {
+      return { id: editing.id, pointIndex }
+    }
+  }
+
+  return { id: polylineAt(scene, point), pointIndex: undefined }
+}
+
+export function movePolylinePoint(
+  scene: readonly Polyline[],
+  move: PointMove,
+): readonly Polyline[] {
+  const polyline = requirePolyline(scene, move.id)
+  const current = requirePoint(polyline, move.index)
+  if (samePoint(current, move.point)) {
+    return scene
+  }
+
+  const points = polyline.points.map((point, index) =>
+    index === move.index ? move.point : point,
+  )
+  return replacePolyline(scene, { ...polyline, points })
+}
+
+export function deletePolylinePoint(
+  scene: readonly Polyline[],
+  target: PointDelete,
+): readonly Polyline[] {
+  const polyline = requirePolyline(scene, target.id)
+  requirePoint(polyline, target.index)
+  if (polyline.points.length < 3) {
+    return scene.filter((item) => item.id !== target.id)
+  }
+
+  const points = polyline.points.filter((_, index) => index !== target.index)
+  return replacePolyline(scene, { ...polyline, points })
+}
+
+function pointIndexAt(polyline: Polyline, point: Point): number | undefined {
+  let closestIndex: number | undefined
+  let closestDistance = hitSlopMm
+  for (let index = 0; index < polyline.points.length; index += 1) {
+    const vertex = polyline.points[index]
+    if (!vertex) {
+      continue
+    }
+
+    const distance = distanceBetween(point, vertex)
+    if (distance > closestDistance) {
+      continue
+    }
+
+    closestDistance = distance
+    closestIndex = index
+  }
+  return closestIndex
+}
+
+function requirePolyline(scene: readonly Polyline[], id: string): Polyline {
+  const polyline = scene.find((item) => item.id === id)
+  if (!polyline) {
+    throw new Error(`No polyline ${id}`)
+  }
+  return polyline
+}
+
+function requirePoint(polyline: Polyline, index: number): Point {
+  const point = polyline.points[index]
+  if (!point) {
+    throw new Error(`No point ${index} on ${polyline.id}`)
+  }
+  return point
+}
+
+function replacePolyline(
+  scene: readonly Polyline[],
+  polyline: Polyline,
+): readonly Polyline[] {
+  return scene.map((item) => (item.id === polyline.id ? polyline : item))
+}
+
+function samePoint(start: Point, end: Point): boolean {
+  return start.x === end.x && start.y === end.y
+}
+
 function tightBounds(points: readonly Point[]): Rectangle | undefined {
   const first = points[0]
   if (!first) {
@@ -247,6 +342,22 @@ export type CornerRectangle = {
 export type PolylineMove = {
   ids: readonly string[]
   delta: Point
+}
+
+export type PointerTarget = {
+  id: string | undefined
+  pointIndex: number | undefined
+}
+
+export type PointMove = {
+  id: string
+  index: number
+  point: Point
+}
+
+export type PointDelete = {
+  id: string
+  index: number
 }
 
 export type SelectionBounds = {

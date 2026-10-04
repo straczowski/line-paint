@@ -2,9 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
 import { commitPolyline, previewStrokePoints } from '../scene/polyline'
-import type { Point } from '../scene/polyline'
+import type { Point, Polyline } from '../scene/polyline'
 import {
-  polylineAt,
+  deletePolylinePoint,
+  movePolylinePoint,
+  pointerTarget,
   selectionBounds,
   touchedPolylineIds,
   translatePolylines,
@@ -19,6 +21,7 @@ export function App() {
   const [follower, setFollower] = useState<Point>()
   const [tool, setTool] = useState<Tool>('polyline')
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [pointEdit, setPointEdit] = useState<PointEdit>()
   const [gesture, setGesture] = useState<SelectGesture>()
   const windowSize = useWindowSize()
   const staticCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -43,15 +46,23 @@ export function App() {
     setTool(next)
     if (next === 'select') {
       clearDraft()
+    } else {
+      setSelectedIds([])
+      setPointEdit(undefined)
     }
     gestureRef.current = undefined
     setGesture(undefined)
   }
 
-  useFinishedPicture(staticCanvasRef, scene, windowSize)
+  useFinishedPicture(
+    staticCanvasRef,
+    scene,
+    windowSize,
+    gesture?.kind === 'point' ? gesture.id : undefined,
+  )
   useOverlayPicture(
     overlayCanvasRef,
-    overlayFrame(scene, draftPoints, follower, selectedIds, gesture),
+    overlayFrame(scene, draftPoints, follower, selectedIds, gesture, pointEdit),
     windowSize,
   )
   useSheetPointer({
@@ -60,14 +71,17 @@ export function App() {
     tool,
     scene,
     selectedIds,
+    pointEdit,
     gestureRef,
     draftCountRef,
     setScene,
     setDraftPoints,
     setFollower,
     setSelectedIds,
+    setPointEdit,
     setGesture,
   })
+  useDeletePoint(tool, scene, pointEdit, setScene, setSelectedIds, setPointEdit)
   useFinishOnEnter(finishDraft)
 
   const showHint =
@@ -113,6 +127,7 @@ function useFinishedPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   scene: Scene,
   windowSize: WindowSize,
+  draggedPolylineId: string | undefined,
 ): void {
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
@@ -121,11 +136,18 @@ function useFinishedPicture(
 
     paintStaticCanvas({
       context: requireContext(canvasRef.current, 'Static'),
-      scene,
+      scene: sceneWithoutPolyline(scene, draggedPolylineId),
       fit: fitSheet(windowSize),
       size: windowSize,
     })
-  }, [canvasRef, scene, windowSize])
+  }, [canvasRef, draggedPolylineId, scene, windowSize])
+}
+
+function sceneWithoutPolyline(scene: Scene, id: string | undefined): Scene {
+  if (!id) {
+    return scene
+  }
+  return scene.filter((polyline) => polyline.id !== id)
 }
 
 function useOverlayPicture(
@@ -144,6 +166,7 @@ function useOverlayPicture(
       preview: frame.preview,
       bounds: frame.bounds,
       marquee: frame.marquee,
+      handles: frame.handles,
       fit: fitSheet(windowSize),
       size: windowSize,
     })
@@ -157,12 +180,14 @@ function useSheetPointer(input: SheetPointerInput): void {
     tool,
     scene,
     selectedIds,
+    pointEdit,
     gestureRef,
     draftCountRef,
     setScene,
     setDraftPoints,
     setFollower,
     setSelectedIds,
+    setPointEdit,
     setGesture,
   } = input
 
@@ -178,12 +203,14 @@ function useSheetPointer(input: SheetPointerInput): void {
       tool,
       scene,
       selectedIds,
+      pointEdit,
       gestureRef,
       draftCountRef,
       setScene,
       setDraftPoints,
       setFollower,
       setSelectedIds,
+      setPointEdit,
       setGesture,
     }
     const onPointerDown = (event: PointerEvent) => {
@@ -198,13 +225,18 @@ function useSheetPointer(input: SheetPointerInput): void {
     const onPointerCancel = (event: PointerEvent) => {
       cancelSheetPointer(event, gestureRef, setGesture)
     }
+    const onDoubleClick = (event: MouseEvent) => {
+      beginPointEdit(canvas, event, sheetPointer)
+    }
 
     canvas.addEventListener('pointerdown', onPointerDown)
+    canvas.addEventListener('dblclick', onDoubleClick)
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
     window.addEventListener('pointercancel', onPointerCancel)
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('dblclick', onDoubleClick)
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointercancel', onPointerCancel)
@@ -213,11 +245,13 @@ function useSheetPointer(input: SheetPointerInput): void {
     canvasRef,
     draftCountRef,
     gestureRef,
+    pointEdit,
     scene,
     selectedIds,
     setDraftPoints,
     setFollower,
     setGesture,
+    setPointEdit,
     setScene,
     setSelectedIds,
     tool,
@@ -248,15 +282,42 @@ function beginSheetPointer(
   if (event.isTrusted) {
     canvas.setPointerCapture(event.pointerId)
   }
+  const target = pointerTarget(input.scene, located.scene, input.pointEdit?.id)
   const press: SelectGesture = {
     kind: 'press',
     pointerId: event.pointerId,
     startCanvas: located.canvas,
     startScene: located.scene,
-    hitId: polylineAt(input.scene, located.scene),
+    hitId: target.id,
+    pointIndex: target.pointIndex,
   }
   input.gestureRef.current = press
   input.setGesture(press)
+}
+
+function beginPointEdit(
+  canvas: HTMLCanvasElement,
+  event: MouseEvent,
+  input: SheetPointerInput,
+): void {
+  if (input.tool !== 'select' || event.button !== 0) {
+    return
+  }
+
+  const located = locatePointer(canvas, event, input.windowSize)
+  if (!located) {
+    return
+  }
+
+  const target = pointerTarget(input.scene, located.scene, undefined)
+  if (!target.id) {
+    return
+  }
+
+  input.gestureRef.current = undefined
+  input.setGesture(undefined)
+  input.setSelectedIds([target.id])
+  input.setPointEdit({ id: target.id, pointIndex: undefined })
 }
 
 function moveSheetPointer(
@@ -288,6 +349,7 @@ function moveSheetPointer(
   input.setGesture(next.gesture)
   if (next.selectedIds !== input.selectedIds) {
     input.setSelectedIds(next.selectedIds)
+    input.setPointEdit(undefined)
   }
 }
 
@@ -323,7 +385,10 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
   input.gestureRef.current = undefined
   input.setGesture(undefined)
   if (gesture.kind === 'press') {
-    input.setSelectedIds(gesture.hitId ? [gesture.hitId] : [])
+    if (event.detail > 1) {
+      return
+    }
+    finishPress(gesture, input)
     return
   }
   if (gesture.kind === 'marquee') {
@@ -333,6 +398,11 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
         end: gesture.currentScene,
       }),
     )
+    input.setPointEdit(undefined)
+    return
+  }
+  if (gesture.kind === 'point') {
+    moveEditedPoint(input, gesture)
     return
   }
 
@@ -342,6 +412,45 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
       delta: sceneDelta(gesture),
     }),
   )
+}
+
+function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
+  if (gesture.pointIndex !== undefined && gesture.hitId) {
+    input.setSelectedIds([gesture.hitId])
+    input.setPointEdit({ id: gesture.hitId, pointIndex: gesture.pointIndex })
+    return
+  }
+  if (gesture.hitId) {
+    input.setSelectedIds([gesture.hitId])
+    if (gesture.hitId !== input.pointEdit?.id) {
+      input.setPointEdit(undefined)
+    }
+    return
+  }
+
+  input.setSelectedIds([])
+  input.setPointEdit(undefined)
+}
+
+function moveEditedPoint(
+  input: SheetPointerInput,
+  gesture: PointGesture,
+): void {
+  input.setScene((current) => {
+    const polyline = current.find((item) => item.id === gesture.id)
+    const origin = polyline?.points[gesture.index]
+    if (!polyline || !origin) {
+      return current
+    }
+
+    return movePolylinePoint(current, {
+      id: gesture.id,
+      index: gesture.index,
+      point: translatedPoint(origin, sceneDelta(gesture)),
+    })
+  })
+  input.setSelectedIds([gesture.id])
+  input.setPointEdit({ id: gesture.id, pointIndex: gesture.index })
 }
 
 function cancelSheetPointer(
@@ -363,7 +472,11 @@ function advanceGesture(
   located: LocatedPointer,
   selectedIds: readonly string[],
 ): GestureAdvance {
-  if (gesture.kind === 'marquee' || gesture.kind === 'move') {
+  if (
+    gesture.kind === 'marquee' ||
+    gesture.kind === 'move' ||
+    gesture.kind === 'point'
+  ) {
     return {
       gesture: { ...gesture, currentScene: located.scene },
       selectedIds,
@@ -371,6 +484,19 @@ function advanceGesture(
   }
   if (!pointerPassedClickSlop(gesture.startCanvas, located.canvas)) {
     return { gesture, selectedIds }
+  }
+  if (gesture.pointIndex !== undefined && gesture.hitId) {
+    return {
+      gesture: {
+        kind: 'point',
+        pointerId: gesture.pointerId,
+        startScene: gesture.startScene,
+        currentScene: located.scene,
+        id: gesture.hitId,
+        index: gesture.pointIndex,
+      },
+      selectedIds,
+    }
   }
   if (!gesture.hitId) {
     return {
@@ -401,7 +527,7 @@ function advanceGesture(
 
 function locatePointer(
   canvas: HTMLCanvasElement,
-  event: PointerEvent,
+  event: { clientX: number; clientY: number },
   windowSize: WindowSize,
 ): LocatedPointer | undefined {
   const fit = fitSheet(windowSize)
@@ -417,7 +543,7 @@ function locatePointer(
 }
 
 function pointerOnCanvas(
-  event: PointerEvent,
+  event: { clientX: number; clientY: number },
   canvas: HTMLCanvasElement,
 ): Point {
   const bounds = canvas.getBoundingClientRect()
@@ -435,10 +561,10 @@ function pointerPassedClickSlop(start: Point, current: Point): boolean {
   return dx * dx + dy * dy >= clickSlopPx * clickSlopPx
 }
 
-function sceneDelta(gesture: MoveGesture): Point {
+function sceneDelta(drag: { startScene: Point; currentScene: Point }): Point {
   return {
-    x: gesture.currentScene.x - gesture.startScene.x,
-    y: gesture.currentScene.y - gesture.startScene.y,
+    x: drag.currentScene.x - drag.startScene.x,
+    y: drag.currentScene.y - drag.startScene.y,
   }
 }
 
@@ -448,16 +574,46 @@ function overlayFrame(
   follower: Point | undefined,
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
+  pointEdit: PointEdit | undefined,
 ): OverlayFrame {
   return {
     draftPoints: previewStrokePoints(draftPoints, follower),
-    preview: movePreview(scene, selectedIds, gesture),
+    preview: overlayPreview(scene, selectedIds, gesture),
     bounds: selectionFrameBounds(scene, selectedIds, gesture),
     marquee:
       gesture?.kind === 'marquee'
         ? { start: gesture.startScene, end: gesture.currentScene }
         : undefined,
+    handles: pointHandles(scene, pointEdit, gesture),
   }
+}
+
+function overlayPreview(
+  scene: Scene,
+  selectedIds: readonly string[],
+  gesture: SelectGesture | undefined,
+): OverlayFrame['preview'] {
+  if (gesture?.kind === 'point') {
+    return pointDragPreview(scene, gesture)
+  }
+  return movePreview(scene, selectedIds, gesture)
+}
+
+function pointDragPreview(
+  scene: Scene,
+  gesture: PointGesture,
+): OverlayFrame['preview'] {
+  const polyline = scene.find((item) => item.id === gesture.id)
+  if (!polyline) {
+    return []
+  }
+
+  return [
+    {
+      points: pointsWithMovedIndex(polyline.points, gesture),
+      widthMm: polyline.widthMm,
+    },
+  ]
 }
 
 function movePreview(
@@ -494,11 +650,72 @@ function selectionFrameBounds(
     if (!selection.ids.includes(polyline.id)) {
       return []
     }
+    if (gesture?.kind === 'point' && gesture.id === polyline.id) {
+      return pointsWithMovedIndex(polyline.points, gesture)
+    }
     return selection.delta
       ? translatedPoints(polyline.points, selection.delta)
       : polyline.points
   })
   return selectionBounds(points)
+}
+
+function pointHandles(
+  scene: Scene,
+  pointEdit: PointEdit | undefined,
+  gesture: SelectGesture | undefined,
+): OverlayFrame['handles'] {
+  if (!pointEdit) {
+    return []
+  }
+
+  const polyline = scene.find((item) => item.id === pointEdit.id)
+  if (!polyline) {
+    return []
+  }
+
+  const points = handlePoints(polyline, gesture)
+  const selectedIndex = handleSelection(pointEdit, gesture)
+  return points.map((point, index) => ({
+    point,
+    selected: index === selectedIndex,
+  }))
+}
+
+function handlePoints(
+  polyline: Polyline,
+  gesture: SelectGesture | undefined,
+): readonly Point[] {
+  if (gesture?.kind === 'point' && gesture.id === polyline.id) {
+    return pointsWithMovedIndex(polyline.points, gesture)
+  }
+  if (gesture?.kind === 'move' && gesture.ids.includes(polyline.id)) {
+    return translatedPoints(polyline.points, sceneDelta(gesture))
+  }
+  return polyline.points
+}
+
+function handleSelection(
+  pointEdit: PointEdit,
+  gesture: SelectGesture | undefined,
+): number | undefined {
+  if (gesture?.kind === 'point') {
+    return gesture.index
+  }
+  if (gesture?.kind === 'press' && gesture.pointIndex !== undefined) {
+    return gesture.pointIndex
+  }
+  return pointEdit.pointIndex
+}
+
+function pointsWithMovedIndex(
+  points: readonly Point[],
+  gesture: PointGesture,
+): readonly Point[] {
+  const delta = sceneDelta(gesture)
+  return points.map((point, index) =>
+    index === gesture.index ? translatedPoint(point, delta) : point,
+  )
 }
 
 function activeSelection(
@@ -515,10 +732,58 @@ function translatedPoints(
   points: readonly Point[],
   delta: Point,
 ): readonly Point[] {
-  return points.map((point) => ({
+  return points.map((point) => translatedPoint(point, delta))
+}
+
+function translatedPoint(point: Point, delta: Point): Point {
+  return {
     x: point.x + delta.x,
     y: point.y + delta.y,
-  }))
+  }
+}
+
+function useDeletePoint(
+  tool: Tool,
+  scene: Scene,
+  pointEdit: PointEdit | undefined,
+  setScene: Dispatch<SetStateAction<Scene>>,
+  setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
+): void {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Backspace' || event.repeat) {
+        return
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return
+      }
+      if (tool !== 'select' || pointEdit?.pointIndex === undefined) {
+        return
+      }
+
+      const index = pointEdit.pointIndex
+      const id = pointEdit.id
+      const polyline = scene.find((item) => item.id === id)
+      if (!polyline?.points[index]) {
+        return
+      }
+
+      event.preventDefault()
+      const next = deletePolylinePoint(scene, { id, index })
+      setScene(next)
+      if (next.some((item) => item.id === id)) {
+        setPointEdit({ id, pointIndex: undefined })
+        return
+      }
+
+      setSelectedIds([])
+      setPointEdit(undefined)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [pointEdit, scene, setPointEdit, setScene, setSelectedIds, tool])
 }
 
 function useFinishOnEnter(finishDraft: () => void): void {
@@ -624,7 +889,7 @@ function requireContext(
 
 type Tool = 'select' | 'polyline'
 
-type SelectGesture = PressGesture | MarqueeGesture | MoveGesture
+type SelectGesture = PressGesture | MarqueeGesture | MoveGesture | PointGesture
 
 type PressGesture = {
   kind: 'press'
@@ -632,6 +897,7 @@ type PressGesture = {
   startCanvas: Point
   startScene: Point
   hitId: string | undefined
+  pointIndex: number | undefined
 }
 
 type MarqueeGesture = {
@@ -649,11 +915,26 @@ type MoveGesture = {
   ids: readonly string[]
 }
 
+type PointGesture = {
+  kind: 'point'
+  pointerId: number
+  startScene: Point
+  currentScene: Point
+  id: string
+  index: number
+}
+
+type PointEdit = {
+  id: string
+  pointIndex: number | undefined
+}
+
 type OverlayFrame = {
   draftPoints: readonly Point[]
   preview: readonly { points: readonly Point[]; widthMm: number }[]
   bounds: SelectionBounds | undefined
   marquee: { start: Point; end: Point } | undefined
+  handles: readonly { point: Point; selected: boolean }[]
 }
 
 type ActiveSelection = {
@@ -667,12 +948,14 @@ type SheetPointerInput = {
   tool: Tool
   scene: Scene
   selectedIds: readonly string[]
+  pointEdit: PointEdit | undefined
   gestureRef: RefObject<SelectGesture | undefined>
   draftCountRef: RefObject<number>
   setScene: Dispatch<SetStateAction<Scene>>
   setDraftPoints: Dispatch<SetStateAction<readonly Point[]>>
   setFollower: Dispatch<SetStateAction<Point | undefined>>
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>
+  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>
 }
 
