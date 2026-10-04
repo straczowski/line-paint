@@ -14,7 +14,7 @@ export function paintStaticCanvas(input: PaintStaticCanvasInput): void {
   strokeSheetBorder(context, fit)
   for (const polyline of scene) {
     paintStroke(context, {
-      points: polyline.points,
+      points: pointsWithClosingSegment(polyline.points, polyline.closed),
       fit,
       color: polyline.stroke,
       widthMm: polyline.widthMm,
@@ -35,7 +35,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
   })
   for (const stroke of preview) {
     paintStroke(context, {
-      points: stroke.points,
+      points: pointsWithClosingSegment(stroke.points, stroke.closed),
       fit,
       color: defaultPolylineStroke,
       widthMm: stroke.widthMm,
@@ -164,6 +164,18 @@ function strokeMarquee(
   )
 }
 
+export function pointsWithClosingSegment(
+  points: readonly Point[],
+  closed: boolean,
+): readonly Point[] {
+  const first = points[0]
+  if (!closed || !first || points.length < 2) {
+    return points
+  }
+
+  return [...points, first]
+}
+
 function paintStroke(
   context: CanvasRenderingContext2D,
   stroke: DrawnStroke,
@@ -265,6 +277,7 @@ type Handle = {
 
 type SelectionStroke = {
   points: readonly Point[]
+  closed: boolean
   widthMm: number
 }
 

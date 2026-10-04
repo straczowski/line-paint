@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { emptyScene } from './sheet'
-import { commitPolyline, previewStrokePoints } from './polyline'
+import {
+  commitPolyline,
+  previewStrokePoints,
+  setPolylineClosed,
+} from './polyline'
 import type { Point } from './polyline'
 
 describe('previewStrokePoints', () => {
@@ -64,6 +68,31 @@ describe('commitPolyline', () => {
 
     expect(first).toHaveLength(1)
     expect(second.map((polyline) => polyline.id)).toEqual(['first', 'second'])
+  })
+})
+
+describe('setPolylineClosed', () => {
+  it('sets the flag and keeps the stored points', () => {
+    const points = [point(0, 0), point(10, 0), point(10, 10)]
+    const scene = commitPolyline(emptyScene, { id: 'line', points })
+    const closed = setPolylineClosed(scene, { id: 'line', closed: true })
+    const polyline = closed[0]
+
+    expect(polyline?.closed).toBe(true)
+    expect(polyline?.points).toEqual(points)
+    expect(polyline?.points).toBe(scene[0]?.points)
+    expect(
+      setPolylineClosed(closed, { id: 'line', closed: false })[0]?.closed,
+    ).toBe(false)
+  })
+
+  it('leaves the scene as it is when the flag already matches', () => {
+    const scene = commitPolyline(emptyScene, {
+      id: 'line',
+      points: [point(0, 0), point(1, 1)],
+    })
+
+    expect(setPolylineClosed(scene, { id: 'line', closed: false })).toBe(scene)
   })
 })
 

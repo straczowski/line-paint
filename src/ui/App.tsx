@@ -1,7 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
-import { commitPolyline, previewStrokePoints } from '../scene/polyline'
+import {
+  commitPolyline,
+  previewStrokePoints,
+  setPolylineClosed,
+} from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
 import {
   deletePolylinePoint,
@@ -86,6 +90,15 @@ export function App() {
 
   const showHint =
     tool === 'polyline' && scene.length === 0 && draftPoints.length === 0
+  const selectedPolyline = lonePolyline(scene, selectedIds)
+  const closeSelected = (closed: boolean) => {
+    if (!selectedPolyline) {
+      return
+    }
+
+    const id = selectedPolyline.id
+    setScene((current) => setPolylineClosed(current, { id, closed }))
+  }
 
   return (
     <main className="sheet-host">
@@ -97,6 +110,12 @@ export function App() {
       <div className="top-islands">
         <ToolIsland tool={tool} onTool={chooseTool} />
         {draftPoints.length > 0 && <FinishIsland onFinish={finishDraft} />}
+        {selectedPolyline && (
+          <ClosedIsland
+            closed={selectedPolyline.closed}
+            onClosed={closeSelected}
+          />
+        )}
       </div>
     </main>
   )
@@ -611,6 +630,7 @@ function pointDragPreview(
   return [
     {
       points: pointsWithMovedIndex(polyline.points, gesture),
+      closed: polyline.closed,
       widthMm: polyline.widthMm,
     },
   ]
@@ -634,6 +654,7 @@ function movePreview(
     return [
       {
         points: translatedPoints(polyline.points, delta),
+        closed: polyline.closed,
         widthMm: polyline.widthMm,
       },
     ]
@@ -873,6 +894,52 @@ function FinishIsland({ onFinish }: FinishIslandProps) {
   )
 }
 
+function lonePolyline(
+  scene: Scene,
+  selectedIds: readonly string[],
+): Polyline | undefined {
+  if (selectedIds.length !== 1) {
+    return undefined
+  }
+
+  const id = selectedIds[0]
+  return scene.find((polyline) => polyline.id === id)
+}
+
+function ClosedIsland({ closed, onClosed }: ClosedIslandProps) {
+  return (
+    <div
+      className="island property-island"
+      role="group"
+      aria-label="Open or closed"
+    >
+      <ChoiceButton
+        label="Open"
+        pressed={!closed}
+        onPress={() => onClosed(false)}
+      />
+      <ChoiceButton
+        label="Closed"
+        pressed={closed}
+        onPress={() => onClosed(true)}
+      />
+    </div>
+  )
+}
+
+function ChoiceButton({ label, pressed, onPress }: ChoiceButtonProps) {
+  return (
+    <button
+      type="button"
+      className="choice-button"
+      aria-pressed={pressed}
+      onClick={onPress}
+    >
+      {label}
+    </button>
+  )
+}
+
 function requireContext(
   canvas: HTMLCanvasElement | null,
   name: string,
@@ -931,7 +998,11 @@ type PointEdit = {
 
 type OverlayFrame = {
   draftPoints: readonly Point[]
-  preview: readonly { points: readonly Point[]; widthMm: number }[]
+  preview: readonly {
+    points: readonly Point[]
+    closed: boolean
+    widthMm: number
+  }[]
   bounds: SelectionBounds | undefined
   marquee: { start: Point; end: Point } | undefined
   handles: readonly { point: Point; selected: boolean }[]
@@ -983,4 +1054,15 @@ type ToolButtonProps = {
 
 type FinishIslandProps = {
   onFinish: () => void
+}
+
+type ClosedIslandProps = {
+  closed: boolean
+  onClosed: (closed: boolean) => void
+}
+
+type ChoiceButtonProps = {
+  label: string
+  pressed: boolean
+  onPress: () => void
 }

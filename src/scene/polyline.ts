@@ -21,6 +21,23 @@ export function commitPolyline(
   return [...scene, polylineFromDraft(draft)]
 }
 
+export function setPolylineClosed(
+  scene: readonly Polyline[],
+  change: PolylineClosed,
+): readonly Polyline[] {
+  const polyline = scene.find((item) => item.id === change.id)
+  if (!polyline) {
+    throw new Error(`No polyline ${change.id}`)
+  }
+  if (polyline.closed === change.closed) {
+    return scene
+  }
+
+  return scene.map((item) =>
+    item.id === change.id ? { ...item, closed: change.closed } : item,
+  )
+}
+
 export const defaultPolylineStroke = '#1e1e1e'
 export const defaultPolylineWidthMm = 0.3
 
@@ -49,6 +66,11 @@ export type Polyline = {
 export type PolylineDraft = {
   id: string
   points: readonly Point[]
+}
+
+export type PolylineClosed = {
+  id: string
+  closed: boolean
 }
 
 export type Point = {

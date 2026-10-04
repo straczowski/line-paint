@@ -59,12 +59,9 @@ body {
 
 .tool-island,
 .property-island {
-  padding: 0.25rem;
-}
-
-.tool-island {
   display: flex;
   gap: 0.25rem;
+  padding: 0.25rem;
 }
 
 .tool-button {
@@ -112,4 +109,24 @@ body {
 
 .finish-button:active {
   background: #5b57d1;
+}
+
+.choice-button {
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #1b1b1f;
+  font: inherit;
+  cursor: pointer;
+}
+
+.choice-button:hover,
+.choice-button[aria-pressed='true'] {
+  background: #e3e2fe;
+}
+
+.choice-button:hover:not([aria-pressed='true']) {
+  background: #f1f0ff;
 }
