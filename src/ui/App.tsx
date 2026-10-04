@@ -1,4 +1,9 @@
-import { RiCheckLine, RiCircleLine, RiRouteLine } from '@remixicon/react'
+import {
+  RiCheckLine,
+  RiCircleLine,
+  RiMenuLine,
+  RiRouteLine,
+} from '@remixicon/react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
@@ -18,6 +23,7 @@ import {
   translatePolylines,
 } from '../scene/selection'
 import type { SelectionBounds } from '../scene/selection'
+import { gcodeDocument, svgDocument } from '../scene/export'
 import { canvasPointToScene, emptyScene, fitSheet } from '../scene/sheet'
 import type { Scene, WindowSize } from '../scene/sheet'
 
@@ -26,6 +32,7 @@ export function App() {
   const [draftPoints, setDraftPoints] = useState<readonly Point[]>([])
   const [follower, setFollower] = useState<Point>()
   const [tool, setTool] = useState<Tool>('polyline')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [pointEdit, setPointEdit] = useState<PointEdit>()
   const [gesture, setGesture] = useState<SelectGesture>()
@@ -109,6 +116,24 @@ export function App() {
       {showHint && (
         <p className="sheet-hint">Click to add a point. Enter to finish.</p>
       )}
+      <div className="menu-anchor">
+        <MenuIsland
+          open={menuOpen}
+          onToggle={() => setMenuOpen((open) => !open)}
+          onExportGcode={() => {
+            downloadTextFile(
+              'drawing.gcode',
+              gcodeDocument(scene),
+              'text/plain',
+            )
+            setMenuOpen(false)
+          }}
+          onExportSvg={() => {
+            downloadTextFile('drawing.svg', svgDocument(scene), 'image/svg+xml')
+            setMenuOpen(false)
+          }}
+        />
+      </div>
       <div className="top-islands">
         <ToolIsland tool={tool} onTool={chooseTool} />
         {tool === 'polyline' && (
@@ -848,6 +873,60 @@ function useFinishOnEnter(finishDraft: () => void): void {
   }, [finishDraft])
 }
 
+function downloadTextFile(name: string, contents: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([contents], { type }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function MenuIsland({
+  open,
+  onToggle,
+  onExportGcode,
+  onExportSvg,
+}: MenuIslandProps) {
+  return (
+    <>
+      <div className="island menu-island">
+        <button
+          type="button"
+          className="tool-button"
+          aria-label="Menu"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          <RiMenuLine />
+        </button>
+      </div>
+      {open && (
+        <div className="island menu-panel" role="menu">
+          <button
+            type="button"
+            className="menu-action"
+            role="menuitem"
+            onClick={onExportGcode}
+          >
+            Export GCode
+          </button>
+          <button
+            type="button"
+            className="menu-action"
+            role="menuitem"
+            onClick={onExportSvg}
+          >
+            Export SVG
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
 function ToolIsland({ tool, onTool }: ToolIslandProps) {
   return (
     <div className="island tool-island">
@@ -1079,6 +1158,13 @@ type LocatedPointer = {
 type GestureAdvance = {
   gesture: SelectGesture
   selectedIds: readonly string[]
+}
+
+type MenuIslandProps = {
+  open: boolean
+  onToggle: () => void
+  onExportGcode: () => void
+  onExportSvg: () => void
 }
 
 type ToolIslandProps = {
