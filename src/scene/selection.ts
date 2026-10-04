@@ -54,6 +54,18 @@ export function translatePolylines(
   return moved ? next : scene
 }
 
+export function duplicatePolylines(
+  scene: readonly Polyline[],
+  copy: PolylineCopy,
+): readonly Polyline[] {
+  if (copy.ids.length === 0) {
+    return scene
+  }
+
+  const copies = copiedPolylines(scene, copy)
+  return [...scene, ...copies]
+}
+
 export function pointerTarget(
   scene: readonly Polyline[],
   point: Point,
@@ -322,6 +334,30 @@ function pointOnSegment(point: Point, segment: Segment): boolean {
   )
 }
 
+function copiedPolylines(
+  scene: readonly Polyline[],
+  copy: PolylineCopy,
+): Polyline[] {
+  if (copy.newIds.length !== copy.ids.length) {
+    throw new Error('Each copy needs its own id')
+  }
+
+  const taken = new Set(scene.map((polyline) => polyline.id))
+  return copy.ids.map((id, index) => {
+    const newId = copy.newIds[index]
+    if (!newId || taken.has(newId)) {
+      throw new Error('Each copy needs its own id')
+    }
+
+    taken.add(newId)
+    return copyPolyline(requirePolyline(scene, id), newId, copy.delta)
+  })
+}
+
+function copyPolyline(polyline: Polyline, id: string, delta: Point): Polyline {
+  return { ...movePolyline(polyline, delta), id }
+}
+
 function movePolyline(polyline: Polyline, delta: Point): Polyline {
   return {
     ...polyline,
@@ -341,6 +377,12 @@ export type CornerRectangle = {
 
 export type PolylineMove = {
   ids: readonly string[]
+  delta: Point
+}
+
+export type PolylineCopy = {
+  ids: readonly string[]
+  newIds: readonly string[]
   delta: Point
 }
 

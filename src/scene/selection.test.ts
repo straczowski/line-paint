@@ -7,6 +7,7 @@ import {
   polylineAt,
   selectionBounds,
   touchedPolylineIds,
+  duplicatePolylines,
   translatePolylines,
 } from './selection'
 
@@ -229,6 +230,65 @@ describe('translatePolylines', () => {
     expect(translatePolylines(scene, { ids: [], delta: point(1, 1) })).toBe(
       scene,
     )
+  })
+})
+
+describe('duplicatePolylines', () => {
+  it('copies one polyline and leaves the original in place', () => {
+    const scene = [
+      {
+        ...stroke('source', [point(1, 2), point(3, 4)], true),
+        stroke: '#e03131',
+        widthMm: 0.5,
+      },
+      stroke('stay', [point(8, 9), point(10, 11)]),
+    ]
+    const next = duplicatePolylines(scene, {
+      ids: ['source'],
+      newIds: ['copy'],
+      delta: point(5, -2),
+    })
+
+    expect(next[0]).toBe(scene[0])
+    expect(next[1]).toBe(scene[1])
+    expect(scene[0]?.points).toEqual([point(1, 2), point(3, 4)])
+    expect(next[2]).toEqual({
+      id: 'copy',
+      points: [point(6, 0), point(8, 2)],
+      closed: true,
+      stroke: '#e03131',
+      widthMm: 0.5,
+    })
+    expect(next[2]?.points).not.toBe(scene[0]?.points)
+    expect(next[2]?.points[0]).not.toBe(scene[0]?.points[0])
+  })
+
+  it('copies every polyline in the selection', () => {
+    const scene = [
+      stroke('a', [point(0, 0), point(1, 0)]),
+      stroke('b', [point(2, 0), point(3, 0)]),
+      stroke('c', [point(4, 0), point(5, 0)]),
+    ]
+    const next = duplicatePolylines(scene, {
+      ids: ['a', 'c'],
+      newIds: ['a-copy', 'c-copy'],
+      delta: point(10, 1),
+    })
+
+    expect(next[0]).toBe(scene[0])
+    expect(next[1]).toBe(scene[1])
+    expect(next[2]).toBe(scene[2])
+    expect(next[3]?.points).toEqual([point(10, 1), point(11, 1)])
+    expect(next[4]?.points).toEqual([point(14, 1), point(15, 1)])
+    expect(next[3]?.id).toBe('a-copy')
+    expect(next[4]?.id).toBe('c-copy')
+  })
+
+  it('returns the same scene when nothing is selected', () => {
+    const scene = [stroke('stay', [point(0, 0), point(1, 1)])]
+    expect(
+      duplicatePolylines(scene, { ids: [], newIds: [], delta: point(1, 1) }),
+    ).toBe(scene)
   })
 })
 

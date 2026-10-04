@@ -10,6 +10,7 @@ import {
 import type { Point, Polyline } from '../scene/polyline'
 import {
   deletePolylinePoint,
+  duplicatePolylines,
   movePolylinePoint,
   pointerTarget,
   selectionBounds,
@@ -430,6 +431,10 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     moveEditedPoint(input, gesture)
     return
   }
+  if (event.altKey && input.pointEdit === undefined) {
+    commitDuplicate(input, gesture)
+    return
+  }
 
   input.setScene((current) =>
     translatePolylines(current, {
@@ -437,6 +442,20 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
       delta: sceneDelta(gesture),
     }),
   )
+}
+
+function commitDuplicate(input: SheetPointerInput, gesture: MoveGesture): void {
+  const newIds = gesture.ids.map(() => crypto.randomUUID())
+  const delta = sceneDelta(gesture)
+  input.setScene((current) =>
+    duplicatePolylines(current, {
+      ids: gesture.ids,
+      newIds,
+      delta,
+    }),
+  )
+  input.setSelectedIds(newIds)
+  input.setPointEdit(undefined)
 }
 
 function finishPress(gesture: PressGesture, input: SheetPointerInput): void {

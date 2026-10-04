@@ -32,7 +32,7 @@ When a polyline is selected, the left panel has one toggle: open or closed. Clos
 - Click a polyline to select the whole object. Drag the selection to move it.
 - Drag on empty canvas to draw a rectangle. Every polyline that rectangle touches is selected.
 - Double-click a polyline to edit its points. In that mode a point can be dragged, and Backspace deletes the selected point.
-- Alt+drag duplicates the polyline and leaves the copy where the drag ends.
+- A drag that ends while Alt is held duplicates the polyline and leaves the copy where the drag ends.
 
 ## Groups
 
