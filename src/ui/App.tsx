@@ -26,6 +26,7 @@ import {
 } from '../scene/selection'
 import type { PointDelete, SelectionBounds } from '../scene/selection'
 import { gcodeDocument, svgDocument } from '../scene/export'
+import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
 import { canvasPointToScene, emptyScene, fitSheet } from '../scene/sheet'
 import type { Scene, WindowSize } from '../scene/sheet'
 
@@ -38,6 +39,7 @@ export function App() {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [pointEdit, setPointEdit] = useState<PointEdit>()
   const [gesture, setGesture] = useState<SelectGesture>()
+  const [shiftHeld, setShiftHeld] = useShiftHeld()
   const windowSize = useWindowSize()
   const staticCanvasRef = useRef<HTMLCanvasElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -77,7 +79,15 @@ export function App() {
   )
   useOverlayPicture(
     overlayCanvasRef,
-    overlayFrame(scene, draftPoints, follower, selectedIds, gesture, pointEdit),
+    overlayFrame(
+      scene,
+      draftPoints,
+      follower,
+      selectedIds,
+      gesture,
+      pointEdit,
+      shiftHeld,
+    ),
     windowSize,
   )
   useSheetPointer({
@@ -95,6 +105,7 @@ export function App() {
     setSelectedIds,
     setPointEdit,
     setGesture,
+    setShiftHeld,
   })
   const deleteSelection = () => {
     if (selectedIds.length === 0) {
@@ -262,6 +273,7 @@ function useSheetPointer(input: SheetPointerInput): void {
     setSelectedIds,
     setPointEdit,
     setGesture,
+    setShiftHeld,
   } = input
 
   useEffect(() => {
@@ -285,6 +297,7 @@ function useSheetPointer(input: SheetPointerInput): void {
       setSelectedIds,
       setPointEdit,
       setGesture,
+      setShiftHeld,
     }
     const onPointerDown = (event: PointerEvent) => {
       beginSheetPointer(canvas, event, sheetPointer)
@@ -327,6 +340,7 @@ function useSheetPointer(input: SheetPointerInput): void {
     setPointEdit,
     setScene,
     setSelectedIds,
+    setShiftHeld,
     tool,
     windowSize,
   ])
@@ -337,6 +351,7 @@ function beginSheetPointer(
   event: PointerEvent,
   input: SheetPointerInput,
 ): void {
+  noteShift(event, input.setShiftHeld)
   if (event.button !== 0) {
     return
   }
@@ -347,7 +362,14 @@ function beginSheetPointer(
   }
   if (input.tool === 'polyline') {
     input.draftCountRef.current += 1
-    input.setDraftPoints((points) => [...points, located.scene])
+    input.setDraftPoints((points) => [
+      ...points,
+      draftPoint({
+        points,
+        pointer: located.scene,
+        shiftHeld: event.shiftKey,
+      }),
+    ])
     input.setFollower(located.scene)
     return
   }
@@ -398,6 +420,7 @@ function moveSheetPointer(
   event: PointerEvent,
   input: SheetPointerInput,
 ): void {
+  noteShift(event, input.setShiftHeld)
   if (input.tool === 'polyline') {
     followDraft(canvas, event, input)
     return
@@ -450,6 +473,7 @@ function samePoint(start: Point, end: Point): boolean {
 }
 
 function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
+  noteShift(event, input.setShiftHeld)
   const gesture = input.gestureRef.current
   if (!gesture || gesture.pointerId !== event.pointerId) {
     return
@@ -475,25 +499,37 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     return
   }
   if (gesture.kind === 'point') {
-    moveEditedPoint(input, gesture)
+    moveEditedPoint(input, gesture, event.shiftKey)
     return
   }
   if (event.altKey && input.pointEdit === undefined) {
-    commitDuplicate(input, gesture)
+    commitDuplicate(input, gesture, event.shiftKey)
     return
   }
 
   input.setScene((current) =>
     translatePolylines(current, {
       ids: gesture.ids,
-      delta: sceneDelta(gesture),
+      delta: dragDelta({
+        start: gesture.startScene,
+        pointer: gesture.currentScene,
+        shiftHeld: event.shiftKey,
+      }),
     }),
   )
 }
 
-function commitDuplicate(input: SheetPointerInput, gesture: MoveGesture): void {
+function commitDuplicate(
+  input: SheetPointerInput,
+  gesture: MoveGesture,
+  shiftHeld: boolean,
+): void {
   const newIds = gesture.ids.map(() => crypto.randomUUID())
-  const delta = sceneDelta(gesture)
+  const delta = dragDelta({
+    start: gesture.startScene,
+    pointer: gesture.currentScene,
+    shiftHeld,
+  })
   input.setScene((current) =>
     duplicatePolylines(current, {
       ids: gesture.ids,
@@ -526,6 +562,7 @@ function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
 function moveEditedPoint(
   input: SheetPointerInput,
   gesture: PointGesture,
+  shiftHeld: boolean,
 ): void {
   input.setScene((current) => {
     const polyline = current.find((item) => item.id === gesture.id)
@@ -537,7 +574,12 @@ function moveEditedPoint(
     return movePolylinePoint(current, {
       id: gesture.id,
       index: gesture.index,
-      point: translatedPoint(origin, sceneDelta(gesture)),
+      point: draggedHandle({
+        origin,
+        start: gesture.startScene,
+        pointer: gesture.currentScene,
+        shiftHeld,
+      }),
     })
   })
   input.setSelectedIds([gesture.id])
@@ -652,13 +694,6 @@ function pointerPassedClickSlop(start: Point, current: Point): boolean {
   return dx * dx + dy * dy >= clickSlopPx * clickSlopPx
 }
 
-function sceneDelta(drag: { startScene: Point; currentScene: Point }): Point {
-  return {
-    x: drag.currentScene.x - drag.startScene.x,
-    y: drag.currentScene.y - drag.startScene.y,
-  }
-}
-
 function overlayFrame(
   scene: Scene,
   draftPoints: readonly Point[],
@@ -666,33 +701,51 @@ function overlayFrame(
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
   pointEdit: PointEdit | undefined,
+  shiftHeld: boolean,
 ): OverlayFrame {
   return {
-    draftPoints: previewStrokePoints(draftPoints, follower),
-    preview: overlayPreview(scene, selectedIds, gesture),
-    bounds: selectionFrameBounds(scene, selectedIds, gesture),
+    draftPoints: previewStrokePoints(
+      draftPoints,
+      followerEnd(draftPoints, follower, shiftHeld),
+    ),
+    preview: overlayPreview(scene, selectedIds, gesture, shiftHeld),
+    bounds: selectionFrameBounds(scene, selectedIds, gesture, shiftHeld),
     marquee:
       gesture?.kind === 'marquee'
         ? { start: gesture.startScene, end: gesture.currentScene }
         : undefined,
-    handles: pointHandles(scene, pointEdit, gesture),
+    handles: pointHandles(scene, pointEdit, gesture, shiftHeld),
   }
+}
+
+function followerEnd(
+  points: readonly Point[],
+  follower: Point | undefined,
+  shiftHeld: boolean,
+): Point | undefined {
+  if (!follower) {
+    return undefined
+  }
+
+  return draftPoint({ points, pointer: follower, shiftHeld })
 }
 
 function overlayPreview(
   scene: Scene,
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
 ): OverlayFrame['preview'] {
   if (gesture?.kind === 'point') {
-    return pointDragPreview(scene, gesture)
+    return pointDragPreview(scene, gesture, shiftHeld)
   }
-  return movePreview(scene, selectedIds, gesture)
+  return movePreview(scene, selectedIds, gesture, shiftHeld)
 }
 
 function pointDragPreview(
   scene: Scene,
   gesture: PointGesture,
+  shiftHeld: boolean,
 ): OverlayFrame['preview'] {
   const polyline = scene.find((item) => item.id === gesture.id)
   if (!polyline) {
@@ -701,7 +754,7 @@ function pointDragPreview(
 
   return [
     {
-      points: pointsWithMovedIndex(polyline.points, gesture),
+      points: pointsWithMovedIndex(polyline.points, gesture, shiftHeld),
       closed: polyline.closed,
       widthMm: polyline.widthMm,
     },
@@ -712,8 +765,9 @@ function movePreview(
   scene: Scene,
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
 ): OverlayFrame['preview'] {
-  const selection = activeSelection(selectedIds, gesture)
+  const selection = activeSelection(selectedIds, gesture, shiftHeld)
   if (!selection.delta) {
     return []
   }
@@ -737,14 +791,15 @@ function selectionFrameBounds(
   scene: Scene,
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
 ): SelectionBounds | undefined {
-  const selection = activeSelection(selectedIds, gesture)
+  const selection = activeSelection(selectedIds, gesture, shiftHeld)
   const points = scene.flatMap((polyline) => {
     if (!selection.ids.includes(polyline.id)) {
       return []
     }
     if (gesture?.kind === 'point' && gesture.id === polyline.id) {
-      return pointsWithMovedIndex(polyline.points, gesture)
+      return pointsWithMovedIndex(polyline.points, gesture, shiftHeld)
     }
     return selection.delta
       ? translatedPoints(polyline.points, selection.delta)
@@ -757,6 +812,7 @@ function pointHandles(
   scene: Scene,
   pointEdit: PointEdit | undefined,
   gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
 ): OverlayFrame['handles'] {
   if (!pointEdit) {
     return []
@@ -767,7 +823,7 @@ function pointHandles(
     return []
   }
 
-  const points = handlePoints(polyline, gesture)
+  const points = handlePoints(polyline, gesture, shiftHeld)
   const selectedIndex = handleSelection(pointEdit, gesture)
   return points.map((point, index) => ({
     point,
@@ -778,12 +834,20 @@ function pointHandles(
 function handlePoints(
   polyline: Polyline,
   gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
 ): readonly Point[] {
   if (gesture?.kind === 'point' && gesture.id === polyline.id) {
-    return pointsWithMovedIndex(polyline.points, gesture)
+    return pointsWithMovedIndex(polyline.points, gesture, shiftHeld)
   }
   if (gesture?.kind === 'move' && gesture.ids.includes(polyline.id)) {
-    return translatedPoints(polyline.points, sceneDelta(gesture))
+    return translatedPoints(
+      polyline.points,
+      dragDelta({
+        start: gesture.startScene,
+        pointer: gesture.currentScene,
+        shiftHeld,
+      }),
+    )
   }
   return polyline.points
 }
@@ -804,19 +868,34 @@ function handleSelection(
 function pointsWithMovedIndex(
   points: readonly Point[],
   gesture: PointGesture,
+  shiftHeld: boolean,
 ): readonly Point[] {
-  const delta = sceneDelta(gesture)
   return points.map((point, index) =>
-    index === gesture.index ? translatedPoint(point, delta) : point,
+    index === gesture.index
+      ? draggedHandle({
+          origin: point,
+          start: gesture.startScene,
+          pointer: gesture.currentScene,
+          shiftHeld,
+        })
+      : point,
   )
 }
 
 function activeSelection(
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
 ): ActiveSelection {
   if (gesture?.kind === 'move') {
-    return { ids: gesture.ids, delta: sceneDelta(gesture) }
+    return {
+      ids: gesture.ids,
+      delta: dragDelta({
+        start: gesture.startScene,
+        pointer: gesture.currentScene,
+        shiftHeld,
+      }),
+    }
   }
   return { ids: selectedIds, delta: undefined }
 }
@@ -911,6 +990,46 @@ function deleteSelectedPoint(
 
   setSelectedIds([])
   setPointEdit(undefined)
+}
+
+function useShiftHeld(): [boolean, Dispatch<SetStateAction<boolean>>] {
+  const [shiftHeld, setShiftHeld] = useState(false)
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Shift') {
+        return
+      }
+      setShiftHeld(true)
+    }
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== 'Shift') {
+        return
+      }
+      setShiftHeld(false)
+    }
+    const onBlur = () => {
+      setShiftHeld(false)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [])
+
+  return [shiftHeld, setShiftHeld]
+}
+
+function noteShift(
+  event: { shiftKey: boolean },
+  setShiftHeld: Dispatch<SetStateAction<boolean>>,
+): void {
+  setShiftHeld((held) => (held === event.shiftKey ? held : event.shiftKey))
 }
 
 function useFinishOnEnter(finishDraft: () => void): void {
@@ -1216,6 +1335,7 @@ type SheetPointerInput = {
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>
+  setShiftHeld: Dispatch<SetStateAction<boolean>>
 }
 
 type LocatedPointer = {
