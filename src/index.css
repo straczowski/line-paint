@@ -113,7 +113,8 @@ body {
 
 .tool-button svg,
 .finish-button svg,
-.choice-button svg {
+.choice-button svg,
+.delete-button svg {
   width: 1rem;
   height: 1rem;
   display: block;
@@ -155,7 +156,8 @@ body {
   cursor: default;
 }
 
-.choice-button {
+.choice-button,
+.delete-button {
   width: 2rem;
   height: 2rem;
   padding: 0;
@@ -173,6 +175,7 @@ body {
   background: #e3e2fe;
 }
 
-.choice-button:hover:not([aria-pressed='true']) {
+.choice-button:hover:not([aria-pressed='true']),
+.delete-button:hover {
   background: #f1f0ff;
 }

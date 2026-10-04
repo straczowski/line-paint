@@ -66,6 +66,19 @@ export function duplicatePolylines(
   return [...scene, ...copies]
 }
 
+export function deletePolylines(
+  scene: readonly Polyline[],
+  ids: readonly string[],
+): readonly Polyline[] {
+  if (ids.length === 0) {
+    return scene
+  }
+
+  const selected = new Set(ids)
+  const next = scene.filter((polyline) => !selected.has(polyline.id))
+  return next.length === scene.length ? scene : next
+}
+
 export function pointerTarget(
   scene: readonly Polyline[],
   point: Point,

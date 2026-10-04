@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Point, Polyline } from './polyline'
 import {
   deletePolylinePoint,
+  deletePolylines,
   movePolylinePoint,
   pointerTarget,
   polylineAt,
@@ -289,6 +290,26 @@ describe('duplicatePolylines', () => {
     expect(
       duplicatePolylines(scene, { ids: [], newIds: [], delta: point(1, 1) }),
     ).toBe(scene)
+  })
+})
+
+describe('deletePolylines', () => {
+  it('removes the named polylines and keeps the rest in order', () => {
+    const scene = [
+      stroke('a', [point(0, 0), point(1, 0)], true),
+      stroke('b', [point(2, 0), point(3, 0)]),
+      stroke('c', [point(4, 0), point(5, 0)], true),
+    ]
+    const next = deletePolylines(scene, ['a', 'c'])
+
+    expect(next).toEqual([scene[1]])
+    expect(next[0]).toBe(scene[1])
+    expect(scene).toHaveLength(3)
+  })
+
+  it('returns the same scene when nothing is selected', () => {
+    const scene = [stroke('stay', [point(0, 0), point(1, 1)])]
+    expect(deletePolylines(scene, [])).toBe(scene)
   })
 })
 

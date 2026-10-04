@@ -1,6 +1,7 @@
 import {
   RiCheckLine,
   RiCircleLine,
+  RiDeleteBinLine,
   RiMenuLine,
   RiRouteLine,
 } from '@remixicon/react'
@@ -15,6 +16,7 @@ import {
 import type { Point, Polyline } from '../scene/polyline'
 import {
   deletePolylinePoint,
+  deletePolylines,
   duplicatePolylines,
   movePolylinePoint,
   pointerTarget,
@@ -22,7 +24,7 @@ import {
   touchedPolylineIds,
   translatePolylines,
 } from '../scene/selection'
-import type { SelectionBounds } from '../scene/selection'
+import type { PointDelete, SelectionBounds } from '../scene/selection'
 import { gcodeDocument, svgDocument } from '../scene/export'
 import { canvasPointToScene, emptyScene, fitSheet } from '../scene/sheet'
 import type { Scene, WindowSize } from '../scene/sheet'
@@ -94,7 +96,26 @@ export function App() {
     setPointEdit,
     setGesture,
   })
-  useDeletePoint(tool, scene, pointEdit, setScene, setSelectedIds, setPointEdit)
+  const deleteSelection = () => {
+    if (selectedIds.length === 0) {
+      return
+    }
+
+    setScene((current) => deletePolylines(current, selectedIds))
+    setSelectedIds([])
+    setPointEdit(undefined)
+    gestureRef.current = undefined
+    setGesture(undefined)
+  }
+  useSelectBackspace(
+    tool,
+    scene,
+    pointEdit,
+    deleteSelection,
+    setScene,
+    setSelectedIds,
+    setPointEdit,
+  )
   useFinishOnEnter(finishDraft)
 
   const showHint =
@@ -142,10 +163,11 @@ export function App() {
             onFinish={finishDraft}
           />
         )}
-        {tool === 'select' && selectedPolyline && (
-          <ClosedIsland
-            closed={selectedPolyline.closed}
+        {tool === 'select' && selectedIds.length > 0 && (
+          <SelectIsland
+            polyline={selectedPolyline}
             onClosed={closeSelected}
+            onDelete={deleteSelection}
           />
         )}
       </div>
@@ -813,48 +835,82 @@ function translatedPoint(point: Point, delta: Point): Point {
   }
 }
 
-function useDeletePoint(
+function useSelectBackspace(
   tool: Tool,
   scene: Scene,
   pointEdit: PointEdit | undefined,
+  deleteSelection: () => void,
   setScene: Dispatch<SetStateAction<Scene>>,
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
 ): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Backspace' || event.repeat) {
-        return
-      }
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return
-      }
-      if (tool !== 'select' || pointEdit?.pointIndex === undefined) {
-        return
-      }
-
-      const index = pointEdit.pointIndex
-      const id = pointEdit.id
-      const polyline = scene.find((item) => item.id === id)
-      if (!polyline?.points[index]) {
+      if (!isPlainBackspace(event) || tool !== 'select') {
         return
       }
 
       event.preventDefault()
-      const next = deletePolylinePoint(scene, { id, index })
-      setScene(next)
-      if (next.some((item) => item.id === id)) {
-        setPointEdit({ id, pointIndex: undefined })
+      if (event.repeat) {
+        return
+      }
+      if (pointEdit?.pointIndex !== undefined) {
+        deleteSelectedPoint(
+          scene,
+          { id: pointEdit.id, index: pointEdit.pointIndex },
+          setScene,
+          setSelectedIds,
+          setPointEdit,
+        )
         return
       }
 
-      setSelectedIds([])
-      setPointEdit(undefined)
+      deleteSelection()
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [pointEdit, scene, setPointEdit, setScene, setSelectedIds, tool])
+  }, [
+    deleteSelection,
+    pointEdit,
+    scene,
+    setPointEdit,
+    setScene,
+    setSelectedIds,
+    tool,
+  ])
+}
+
+function isPlainBackspace(event: KeyboardEvent): boolean {
+  return (
+    event.key === 'Backspace' &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  )
+}
+
+function deleteSelectedPoint(
+  scene: Scene,
+  target: PointDelete,
+  setScene: Dispatch<SetStateAction<Scene>>,
+  setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
+): void {
+  const polyline = scene.find((item) => item.id === target.id)
+  if (!polyline?.points[target.index]) {
+    return
+  }
+
+  const next = deletePolylinePoint(scene, target)
+  setScene(next)
+  if (next.some((item) => item.id === target.id)) {
+    setPointEdit({ id: target.id, pointIndex: undefined })
+    return
+  }
+
+  setSelectedIds([])
+  setPointEdit(undefined)
 }
 
 function useFinishOnEnter(finishDraft: () => void): void {
@@ -1016,27 +1072,39 @@ function lonePolyline(
   return scene.find((polyline) => polyline.id === id)
 }
 
-function ClosedIsland({ closed, onClosed }: ClosedIslandProps) {
+function SelectIsland({ polyline, onClosed, onDelete }: SelectIslandProps) {
   return (
     <div
       className="island property-island"
       role="group"
-      aria-label="Open or closed"
+      aria-label={polyline ? 'Open or closed' : undefined}
     >
-      <ChoiceButton
-        label="Open"
-        pressed={!closed}
-        onPress={() => onClosed(false)}
+      {polyline && (
+        <>
+          <ChoiceButton
+            label="Open"
+            pressed={!polyline.closed}
+            onPress={() => onClosed(false)}
+          >
+            <RiRouteLine />
+          </ChoiceButton>
+          <ChoiceButton
+            label="Closed"
+            pressed={polyline.closed}
+            onPress={() => onClosed(true)}
+          >
+            <RiCircleLine />
+          </ChoiceButton>
+        </>
+      )}
+      <button
+        type="button"
+        className="delete-button"
+        aria-label="Delete"
+        onClick={onDelete}
       >
-        <RiRouteLine />
-      </ChoiceButton>
-      <ChoiceButton
-        label="Closed"
-        pressed={closed}
-        onPress={() => onClosed(true)}
-      >
-        <RiCircleLine />
-      </ChoiceButton>
+        <RiDeleteBinLine />
+      </button>
     </div>
   )
 }
@@ -1184,9 +1252,10 @@ type FinishIslandProps = {
   onFinish: () => void
 }
 
-type ClosedIslandProps = {
-  closed: boolean
+type SelectIslandProps = {
+  polyline: Polyline | undefined
   onClosed: (closed: boolean) => void
+  onDelete: () => void
 }
 
 type ChoiceButtonProps = {
