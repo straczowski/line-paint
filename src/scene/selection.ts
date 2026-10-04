@@ -31,7 +31,7 @@ export function selectionBounds(
     return undefined
   }
 
-  return outsetBounds(bounds, boundsOutsetMm)
+  return outsetBounds(bounds, selectionOutsetMm)
 }
 
 export function translatePolylines(
@@ -202,7 +202,7 @@ function outsetBounds(bounds: Rectangle, outsetMm: number): Rectangle {
   }
 }
 
-const boundsOutsetMm = 2
+export const selectionOutsetMm = 2
 
 function pointHitsPolyline(point: Point, polyline: Polyline): boolean {
   return segmentsOf(polyline).some(

@@ -3,6 +3,7 @@ import {
   defaultPolylineWidthMm,
 } from '../scene/polyline'
 import type { Point } from '../scene/polyline'
+import { scaleHandleHalfPx } from '../scene/scale'
 import type { SelectionBounds } from '../scene/selection'
 import { sceneYToTop, sheetHeightMm, sheetWidthMm } from '../scene/sheet'
 import type { Scene, SheetFit, WindowSize } from '../scene/sheet'
@@ -23,8 +24,17 @@ export function paintStaticCanvas(input: PaintStaticCanvasInput): void {
 }
 
 export function paintOverlay(input: PaintOverlayInput): void {
-  const { context, draftPoints, preview, bounds, marquee, handles, fit, size } =
-    input
+  const {
+    context,
+    draftPoints,
+    preview,
+    bounds,
+    scaleHandles,
+    marquee,
+    handles,
+    fit,
+    size,
+  } = input
   matchCanvasSize(context, size)
   clearOverlay(context, size)
   paintStroke(context, {
@@ -43,6 +53,9 @@ export function paintOverlay(input: PaintOverlayInput): void {
   }
   if (bounds) {
     strokeSelectionBounds(context, { bounds, fit })
+    if (scaleHandles) {
+      paintScaleHandles(context, bounds, fit)
+    }
   }
   if (marquee) {
     strokeMarquee(context, { ...marquee, fit })
@@ -112,6 +125,33 @@ function strokeSelectionBounds(
     bottomRight.x - topLeft.x,
     bottomRight.y - topLeft.y,
   )
+}
+
+function paintScaleHandles(
+  context: CanvasRenderingContext2D,
+  bounds: SelectionBounds,
+  fit: SheetFit,
+): void {
+  const side = scaleHandleHalfPx * 2
+  context.fillStyle = canvasWhite
+  context.strokeStyle = selectionColor
+  context.lineWidth = 1
+  for (const corner of scaleCorners(bounds)) {
+    const center = scenePointToCanvas(corner, fit)
+    const left = center.x - scaleHandleHalfPx
+    const top = center.y - scaleHandleHalfPx
+    context.fillRect(left, top, side, side)
+    context.strokeRect(left, top, side, side)
+  }
+}
+
+function scaleCorners(bounds: SelectionBounds): readonly Point[] {
+  return [
+    { x: bounds.minX, y: bounds.maxY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.minX, y: bounds.minY },
+  ]
 }
 
 function paintHandles(
@@ -264,6 +304,7 @@ type PaintOverlayInput = {
   draftPoints: readonly Point[]
   preview: readonly SelectionStroke[]
   bounds: SelectionBounds | undefined
+  scaleHandles: boolean
   marquee: Marquee | undefined
   handles: readonly Handle[]
   fit: SheetFit

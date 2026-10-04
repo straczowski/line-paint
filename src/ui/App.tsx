@@ -27,6 +27,12 @@ import {
 import type { PointDelete, SelectionBounds } from '../scene/selection'
 import { gcodeDocument, svgDocument } from '../scene/export'
 import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
+import {
+  scaleHandleAt,
+  scaleHandleHalfPx,
+  scalePolylines,
+} from '../scene/scale'
+import type { ScaleHandle } from '../scene/scale'
 import { canvasPointToScene, emptyScene, fitSheet } from '../scene/sheet'
 import type { Scene, WindowSize } from '../scene/sheet'
 
@@ -39,7 +45,8 @@ export function App() {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [pointEdit, setPointEdit] = useState<PointEdit>()
   const [gesture, setGesture] = useState<SelectGesture>()
-  const [shiftHeld, setShiftHeld] = useShiftHeld()
+  const [shiftHeld, setShiftHeld] = useHeldKey('Shift')
+  const [altHeld, setAltHeld] = useHeldKey('Alt')
   const windowSize = useWindowSize()
   const staticCanvasRef = useRef<HTMLCanvasElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -69,13 +76,16 @@ export function App() {
     }
     gestureRef.current = undefined
     setGesture(undefined)
+    if (overlayCanvasRef.current) {
+      overlayCanvasRef.current.style.cursor = ''
+    }
   }
 
   useFinishedPicture(
     staticCanvasRef,
     scene,
     windowSize,
-    gesture?.kind === 'point' ? gesture.id : undefined,
+    hiddenPolylineKey(gesture),
   )
   useOverlayPicture(
     overlayCanvasRef,
@@ -87,6 +97,7 @@ export function App() {
       gesture,
       pointEdit,
       shiftHeld,
+      altHeld,
     ),
     windowSize,
   )
@@ -106,6 +117,7 @@ export function App() {
     setPointEdit,
     setGesture,
     setShiftHeld,
+    setAltHeld,
   })
   const deleteSelection = () => {
     if (selectedIds.length === 0) {
@@ -211,7 +223,7 @@ function useFinishedPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   scene: Scene,
   windowSize: WindowSize,
-  draggedPolylineId: string | undefined,
+  hiddenKey: string,
 ): void {
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
@@ -220,18 +232,30 @@ function useFinishedPicture(
 
     paintStaticCanvas({
       context: requireContext(canvasRef.current, 'Static'),
-      scene: sceneWithoutPolyline(scene, draggedPolylineId),
+      scene: sceneWithoutHiddenKey(scene, hiddenKey),
       fit: fitSheet(windowSize),
       size: windowSize,
     })
-  }, [canvasRef, draggedPolylineId, scene, windowSize])
+  }, [canvasRef, hiddenKey, scene, windowSize])
 }
 
-function sceneWithoutPolyline(scene: Scene, id: string | undefined): Scene {
-  if (!id) {
+function hiddenPolylineKey(gesture: SelectGesture | undefined): string {
+  if (gesture?.kind === 'point') {
+    return gesture.id
+  }
+  if (gesture?.kind === 'scale') {
+    return gesture.ids.join(',')
+  }
+  return ''
+}
+
+function sceneWithoutHiddenKey(scene: Scene, hiddenKey: string): Scene {
+  if (!hiddenKey) {
     return scene
   }
-  return scene.filter((polyline) => polyline.id !== id)
+
+  const hidden = new Set(hiddenKey.split(','))
+  return scene.filter((polyline) => !hidden.has(polyline.id))
 }
 
 function useOverlayPicture(
@@ -249,6 +273,7 @@ function useOverlayPicture(
       draftPoints: frame.draftPoints,
       preview: frame.preview,
       bounds: frame.bounds,
+      scaleHandles: frame.scaleHandles,
       marquee: frame.marquee,
       handles: frame.handles,
       fit: fitSheet(windowSize),
@@ -274,6 +299,7 @@ function useSheetPointer(input: SheetPointerInput): void {
     setPointEdit,
     setGesture,
     setShiftHeld,
+    setAltHeld,
   } = input
 
   useEffect(() => {
@@ -298,6 +324,7 @@ function useSheetPointer(input: SheetPointerInput): void {
       setPointEdit,
       setGesture,
       setShiftHeld,
+      setAltHeld,
     }
     const onPointerDown = (event: PointerEvent) => {
       beginSheetPointer(canvas, event, sheetPointer)
@@ -340,6 +367,7 @@ function useSheetPointer(input: SheetPointerInput): void {
     setPointEdit,
     setScene,
     setSelectedIds,
+    setAltHeld,
     setShiftHeld,
     tool,
     windowSize,
@@ -351,7 +379,8 @@ function beginSheetPointer(
   event: PointerEvent,
   input: SheetPointerInput,
 ): void {
-  noteShift(event, input.setShiftHeld)
+  noteHeldKey(event.shiftKey, input.setShiftHeld)
+  noteHeldKey(event.altKey, input.setAltHeld)
   if (event.button !== 0) {
     return
   }
@@ -361,6 +390,7 @@ function beginSheetPointer(
     return
   }
   if (input.tool === 'polyline') {
+    canvas.style.cursor = ''
     input.draftCountRef.current += 1
     input.setDraftPoints((points) => [
       ...points,
@@ -377,7 +407,10 @@ function beginSheetPointer(
   if (event.isTrusted) {
     canvas.setPointerCapture(event.pointerId)
   }
-  const target = pointerTarget(input.scene, located.scene, input.pointEdit?.id)
+  const scaleHandle = scaleHandleUnderPointer(input, located.scene)
+  const target = scaleHandle
+    ? { id: undefined, pointIndex: undefined }
+    : pointerTarget(input.scene, located.scene, input.pointEdit?.id)
   const press: SelectGesture = {
     kind: 'press',
     pointerId: event.pointerId,
@@ -385,9 +418,11 @@ function beginSheetPointer(
     startScene: located.scene,
     hitId: target.id,
     pointIndex: target.pointIndex,
+    scaleHandle,
   }
   input.gestureRef.current = press
   input.setGesture(press)
+  placeScaleCursor(canvas, located, input)
 }
 
 function beginPointEdit(
@@ -420,33 +455,34 @@ function moveSheetPointer(
   event: PointerEvent,
   input: SheetPointerInput,
 ): void {
-  noteShift(event, input.setShiftHeld)
+  noteHeldKey(event.shiftKey, input.setShiftHeld)
+  noteHeldKey(event.altKey, input.setAltHeld)
   if (input.tool === 'polyline') {
+    canvas.style.cursor = ''
     followDraft(canvas, event, input)
     return
   }
 
+  const located = locatePointer(canvas, event, input.windowSize)
   const gesture = input.gestureRef.current
   if (!gesture || gesture.pointerId !== event.pointerId) {
+    placeScaleCursor(canvas, located, input)
     return
   }
-
-  const located = locatePointer(canvas, event, input.windowSize)
   if (!located) {
     return
   }
 
   const next = advanceGesture(gesture, located, input.selectedIds)
-  if (next.gesture === gesture && next.selectedIds === input.selectedIds) {
-    return
+  if (next.gesture !== gesture || next.selectedIds !== input.selectedIds) {
+    input.gestureRef.current = next.gesture
+    input.setGesture(next.gesture)
+    if (next.selectedIds !== input.selectedIds) {
+      input.setSelectedIds(next.selectedIds)
+      input.setPointEdit(undefined)
+    }
   }
-
-  input.gestureRef.current = next.gesture
-  input.setGesture(next.gesture)
-  if (next.selectedIds !== input.selectedIds) {
-    input.setSelectedIds(next.selectedIds)
-    input.setPointEdit(undefined)
-  }
+  placeScaleCursor(canvas, located, input)
 }
 
 function followDraft(
@@ -473,7 +509,8 @@ function samePoint(start: Point, end: Point): boolean {
 }
 
 function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
-  noteShift(event, input.setShiftHeld)
+  noteHeldKey(event.shiftKey, input.setShiftHeld)
+  noteHeldKey(event.altKey, input.setAltHeld)
   const gesture = input.gestureRef.current
   if (!gesture || gesture.pointerId !== event.pointerId) {
     return
@@ -481,6 +518,14 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
 
   input.gestureRef.current = undefined
   input.setGesture(undefined)
+  const canvas = input.canvasRef.current
+  if (canvas) {
+    placeScaleCursor(
+      canvas,
+      locatePointer(canvas, event, input.windowSize),
+      input,
+    )
+  }
   if (gesture.kind === 'press') {
     if (event.detail > 1) {
       return
@@ -500,6 +545,15 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
   }
   if (gesture.kind === 'point') {
     moveEditedPoint(input, gesture, event.shiftKey)
+    return
+  }
+  if (gesture.kind === 'scale') {
+    input.setScene((current) =>
+      scalePolylines(
+        current,
+        scaleInput(gesture, event.shiftKey, event.altKey),
+      ),
+    )
     return
   }
   if (event.altKey && input.pointEdit === undefined) {
@@ -542,6 +596,9 @@ function commitDuplicate(
 }
 
 function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
+  if (gesture.scaleHandle) {
+    return
+  }
   if (gesture.pointIndex !== undefined && gesture.hitId) {
     input.setSelectedIds([gesture.hitId])
     input.setPointEdit({ id: gesture.hitId, pointIndex: gesture.pointIndex })
@@ -608,7 +665,8 @@ function advanceGesture(
   if (
     gesture.kind === 'marquee' ||
     gesture.kind === 'move' ||
-    gesture.kind === 'point'
+    gesture.kind === 'point' ||
+    gesture.kind === 'scale'
   ) {
     return {
       gesture: { ...gesture, currentScene: located.scene },
@@ -627,6 +685,19 @@ function advanceGesture(
         currentScene: located.scene,
         id: gesture.hitId,
         index: gesture.pointIndex,
+      },
+      selectedIds,
+    }
+  }
+  if (gesture.scaleHandle && selectedIds.length > 0) {
+    return {
+      gesture: {
+        kind: 'scale',
+        pointerId: gesture.pointerId,
+        startScene: gesture.startScene,
+        currentScene: located.scene,
+        ids: selectedIds,
+        handle: gesture.scaleHandle,
       },
       selectedIds,
     }
@@ -702,19 +773,28 @@ function overlayFrame(
   gesture: SelectGesture | undefined,
   pointEdit: PointEdit | undefined,
   shiftHeld: boolean,
+  altHeld: boolean,
 ): OverlayFrame {
+  const bounds = selectionFrameBounds(
+    scene,
+    selectedIds,
+    gesture,
+    shiftHeld,
+    altHeld,
+  )
   return {
     draftPoints: previewStrokePoints(
       draftPoints,
       followerEnd(draftPoints, follower, shiftHeld),
     ),
-    preview: overlayPreview(scene, selectedIds, gesture, shiftHeld),
-    bounds: selectionFrameBounds(scene, selectedIds, gesture, shiftHeld),
+    preview: overlayPreview(scene, selectedIds, gesture, shiftHeld, altHeld),
+    bounds,
     marquee:
       gesture?.kind === 'marquee'
         ? { start: gesture.startScene, end: gesture.currentScene }
         : undefined,
     handles: pointHandles(scene, pointEdit, gesture, shiftHeld),
+    scaleHandles: pointEdit === undefined && bounds !== undefined,
   }
 }
 
@@ -735,9 +815,13 @@ function overlayPreview(
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
   shiftHeld: boolean,
+  altHeld: boolean,
 ): OverlayFrame['preview'] {
   if (gesture?.kind === 'point') {
     return pointDragPreview(scene, gesture, shiftHeld)
+  }
+  if (gesture?.kind === 'scale') {
+    return scalePreview(scene, gesture, shiftHeld, altHeld)
   }
   return movePreview(scene, selectedIds, gesture, shiftHeld)
 }
@@ -792,7 +876,17 @@ function selectionFrameBounds(
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
   shiftHeld: boolean,
+  altHeld: boolean,
 ): SelectionBounds | undefined {
+  if (gesture?.kind === 'scale') {
+    return selectionBounds(
+      pointsIn(
+        scalePolylines(scene, scaleInput(gesture, shiftHeld, altHeld)),
+        gesture.ids,
+      ),
+    )
+  }
+
   const selection = activeSelection(selectedIds, gesture, shiftHeld)
   const points = scene.flatMap((polyline) => {
     if (!selection.ids.includes(polyline.id)) {
@@ -806,6 +900,107 @@ function selectionFrameBounds(
       : polyline.points
   })
   return selectionBounds(points)
+}
+
+function scalePreview(
+  scene: Scene,
+  gesture: ScaleGesture,
+  shiftHeld: boolean,
+  altHeld: boolean,
+): OverlayFrame['preview'] {
+  const scaled = scalePolylines(scene, scaleInput(gesture, shiftHeld, altHeld))
+  return scaled.flatMap((polyline) => {
+    if (!gesture.ids.includes(polyline.id)) {
+      return []
+    }
+    return [
+      {
+        points: polyline.points,
+        closed: polyline.closed,
+        widthMm: polyline.widthMm,
+      },
+    ]
+  })
+}
+
+function scaleInput(
+  gesture: ScaleGesture,
+  shiftHeld: boolean,
+  altHeld: boolean,
+) {
+  return {
+    ids: gesture.ids,
+    handle: gesture.handle,
+    pointer: gesture.currentScene,
+    shiftHeld,
+    altHeld,
+  }
+}
+
+function pointsIn(scene: Scene, ids: readonly string[]): readonly Point[] {
+  return scene.flatMap((polyline) =>
+    ids.includes(polyline.id) ? polyline.points : [],
+  )
+}
+
+function scaleHandleUnderPointer(
+  input: SheetPointerInput,
+  point: Point,
+): ScaleHandle | undefined {
+  if (input.pointEdit || input.selectedIds.length === 0) {
+    return undefined
+  }
+
+  const fit = fitSheet(input.windowSize)
+  if (fit.scale <= 0) {
+    return undefined
+  }
+
+  const bounds = selectionBounds(pointsIn(input.scene, input.selectedIds))
+  if (!bounds) {
+    return undefined
+  }
+
+  return scaleHandleAt(bounds, point, scaleHandleHalfPx / fit.scale)
+}
+
+function placeScaleCursor(
+  canvas: HTMLCanvasElement,
+  located: LocatedPointer | undefined,
+  input: SheetPointerInput,
+): void {
+  if (input.tool !== 'select' || !located) {
+    canvas.style.cursor = ''
+    return
+  }
+
+  const gesture = input.gestureRef.current
+  if (gesture && gesture.kind !== 'press' && gesture.kind !== 'scale') {
+    canvas.style.cursor = ''
+    return
+  }
+
+  const handle =
+    gesture?.kind === 'scale'
+      ? gesture.handle
+      : scaleHandleUnderPointer(input, located.scene)
+  canvas.style.cursor = cursorForScaleHandle(handle)
+}
+
+function cursorForScaleHandle(handle: ScaleHandle | undefined): string {
+  if (handle === 'northWest' || handle === 'southEast') {
+    return 'nwse-resize'
+  }
+  if (handle === 'northEast' || handle === 'southWest') {
+    return 'nesw-resize'
+  }
+  if (handle === 'north' || handle === 'south') {
+    return 'ns-resize'
+  }
+  if (handle === 'east' || handle === 'west') {
+    return 'ew-resize'
+  }
+  return ''
 }
 
 function pointHandles(
@@ -992,24 +1187,24 @@ function deleteSelectedPoint(
   setPointEdit(undefined)
 }
 
-function useShiftHeld(): [boolean, Dispatch<SetStateAction<boolean>>] {
-  const [shiftHeld, setShiftHeld] = useState(false)
+function useHeldKey(key: string): [boolean, Dispatch<SetStateAction<boolean>>] {
+  const [held, setHeld] = useState(false)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Shift') {
+      if (event.key !== key) {
         return
       }
-      setShiftHeld(true)
+      setHeld(true)
     }
     const onKeyUp = (event: KeyboardEvent) => {
-      if (event.key !== 'Shift') {
+      if (event.key !== key) {
         return
       }
-      setShiftHeld(false)
+      setHeld(false)
     }
     const onBlur = () => {
-      setShiftHeld(false)
+      setHeld(false)
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -1020,16 +1215,16 @@ function useShiftHeld(): [boolean, Dispatch<SetStateAction<boolean>>] {
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
     }
-  }, [])
+  }, [key])
 
-  return [shiftHeld, setShiftHeld]
+  return [held, setHeld]
 }
 
-function noteShift(
-  event: { shiftKey: boolean },
-  setShiftHeld: Dispatch<SetStateAction<boolean>>,
+function noteHeldKey(
+  held: boolean,
+  setHeld: Dispatch<SetStateAction<boolean>>,
 ): void {
-  setShiftHeld((held) => (held === event.shiftKey ? held : event.shiftKey))
+  setHeld((current) => (current === held ? current : held))
 }
 
 function useFinishOnEnter(finishDraft: () => void): void {
@@ -1263,7 +1458,8 @@ function requireContext(
 
 type Tool = 'select' | 'polyline'
 
-type SelectGesture = PressGesture | MarqueeGesture | MoveGesture | PointGesture
+type SelectGesture =
+  PressGesture | MarqueeGesture | MoveGesture | PointGesture | ScaleGesture
 
 type PressGesture = {
   kind: 'press'
@@ -1272,6 +1468,7 @@ type PressGesture = {
   startScene: Point
   hitId: string | undefined
   pointIndex: number | undefined
+  scaleHandle: ScaleHandle | undefined
 }
 
 type MarqueeGesture = {
@@ -1298,6 +1495,15 @@ type PointGesture = {
   index: number
 }
 
+type ScaleGesture = {
+  kind: 'scale'
+  pointerId: number
+  startScene: Point
+  currentScene: Point
+  ids: readonly string[]
+  handle: ScaleHandle
+}
+
 type PointEdit = {
   id: string
   pointIndex: number | undefined
@@ -1313,6 +1519,7 @@ type OverlayFrame = {
   bounds: SelectionBounds | undefined
   marquee: { start: Point; end: Point } | undefined
   handles: readonly { point: Point; selected: boolean }[]
+  scaleHandles: boolean
 }
 
 type ActiveSelection = {
@@ -1336,6 +1543,7 @@ type SheetPointerInput = {
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>
   setShiftHeld: Dispatch<SetStateAction<boolean>>
+  setAltHeld: Dispatch<SetStateAction<boolean>>
 }
 
 type LocatedPointer = {
