@@ -26,6 +26,8 @@ import {
 } from '../scene/selection'
 import type { PointDelete, SelectionBounds } from '../scene/selection'
 import { gcodeDocument, svgDocument } from '../scene/export'
+import { polylinesFromSvg } from '../scene/import'
+import type { ImportedPolyline } from '../scene/import'
 import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
 import {
   scaleHandleAt,
@@ -50,6 +52,8 @@ export function App() {
   const windowSize = useWindowSize()
   const staticCanvasRef = useRef<HTMLCanvasElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
+  const svgInputRef = useRef<HTMLInputElement>(null)
+  const importToast = useImportToast()
   const gestureRef = useRef<SelectGesture | undefined>(undefined)
   const draftCountRef = useRef(0)
   const clearDraft = () => {
@@ -153,6 +157,24 @@ export function App() {
     setScene((current) => setPolylineClosed(current, { id, closed }))
   }
 
+  const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
+    setScene(polylines.map(polylineWithNewId))
+    setSelectedIds([])
+    setPointEdit(undefined)
+    clearDraft()
+    gestureRef.current = undefined
+    setGesture(undefined)
+    if (overlayCanvasRef.current) {
+      overlayCanvasRef.current.style.cursor = ''
+    }
+    importToast.hide()
+  }
+  const chooseSvgFile = () => {
+    setMenuOpen(false)
+    svgInputRef.current?.click()
+  }
+  useSvgDrop(applyImportedSvg, importToast.show)
+
   return (
     <main className="sheet-host">
       <canvas ref={staticCanvasRef} className="sheet-canvas" />
@@ -160,10 +182,26 @@ export function App() {
       {showHint && (
         <p className="sheet-hint">Click to add a point. Enter to finish.</p>
       )}
+      <input
+        ref={svgInputRef}
+        type="file"
+        accept=".svg"
+        hidden
+        onChange={(event) => {
+          const input = event.currentTarget
+          const file = input.files?.[0]
+          input.value = ''
+          if (file) {
+            void loadSvgFile(file, applyImportedSvg, importToast.show)
+          }
+        }}
+      />
+      <ImportToast notice={importToast.notice} />
       <div className="menu-anchor">
         <MenuIsland
           open={menuOpen}
           onToggle={() => setMenuOpen((open) => !open)}
+          onImportSvg={chooseSvgFile}
           onExportGcode={() => {
             downloadTextFile(
               'drawing.gcode',
@@ -1243,6 +1281,82 @@ function useFinishOnEnter(finishDraft: () => void): void {
   }, [finishDraft])
 }
 
+const importToastMs = 4000
+
+function useSvgDrop(
+  apply: (polylines: readonly ImportedPolyline[]) => void,
+  showRefusal: () => void,
+): void {
+  useEffect(() => {
+    const cancelNavigation = (event: DragEvent) => {
+      event.preventDefault()
+    }
+    const onDrop = (event: DragEvent) => {
+      event.preventDefault()
+      const file = event.dataTransfer?.files[0]
+      if (!file) {
+        return
+      }
+
+      void loadSvgFile(file, apply, showRefusal)
+    }
+
+    window.addEventListener('dragover', cancelNavigation)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragover', cancelNavigation)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [apply, showRefusal])
+}
+
+function useImportToast(): ImportToast {
+  const [notice, setNotice] = useState<ImportNotice>()
+  const key = useRef(0)
+  const timer = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    return () => window.clearTimeout(timer.current)
+  }, [])
+
+  const show = () => {
+    window.clearTimeout(timer.current)
+    key.current += 1
+    setNotice({ key: key.current })
+    timer.current = window.setTimeout(() => setNotice(undefined), importToastMs)
+  }
+
+  const hide = () => {
+    window.clearTimeout(timer.current)
+    setNotice(undefined)
+  }
+
+  return { notice, show, hide }
+}
+
+async function loadSvgFile(
+  file: File,
+  apply: (polylines: readonly ImportedPolyline[]) => void,
+  showRefusal: () => void,
+): Promise<void> {
+  let text: string
+  try {
+    text = await file.text()
+  } catch (error) {
+    console.error('Failed to read SVG file', { name: file.name, error })
+    showRefusal()
+    return
+  }
+
+  const imported = polylinesFromSvg(text)
+  if (!imported.ok) {
+    showRefusal()
+    return
+  }
+
+  apply(imported.polylines)
+}
+
 function downloadTextFile(name: string, contents: string, type: string): void {
   const url = URL.createObjectURL(new Blob([contents], { type }))
   const link = document.createElement('a')
@@ -1254,9 +1368,33 @@ function downloadTextFile(name: string, contents: string, type: string): void {
   URL.revokeObjectURL(url)
 }
 
+function polylineWithNewId(polyline: ImportedPolyline): Polyline {
+  return {
+    id: crypto.randomUUID(),
+    points: polyline.points,
+    closed: polyline.closed,
+    stroke: polyline.stroke,
+    widthMm: polyline.widthMm,
+  }
+}
+
+function ImportToast({ notice }: ImportToastProps) {
+  if (!notice) {
+    return null
+  }
+
+  return (
+    <p key={notice.key} className="island import-toast" role="alert">
+      This SVG format is not suitable for line-paint. Only path elements are
+      allowed.
+    </p>
+  )
+}
+
 function MenuIsland({
   open,
   onToggle,
+  onImportSvg,
   onExportGcode,
   onExportSvg,
 }: MenuIslandProps) {
@@ -1290,6 +1428,14 @@ function MenuIsland({
             onClick={onExportSvg}
           >
             Export SVG
+          </button>
+          <button
+            type="button"
+            className="menu-action"
+            role="menuitem"
+            onClick={onImportSvg}
+          >
+            Import SVG
           </button>
         </div>
       )}
@@ -1556,9 +1702,24 @@ type GestureAdvance = {
   selectedIds: readonly string[]
 }
 
+type ImportNotice = {
+  key: number
+}
+
+type ImportToast = {
+  notice: ImportNotice | undefined
+  show: () => void
+  hide: () => void
+}
+
+type ImportToastProps = {
+  notice: ImportNotice | undefined
+}
+
 type MenuIslandProps = {
   open: boolean
   onToggle: () => void
+  onImportSvg: () => void
   onExportGcode: () => void
   onExportSvg: () => void
 }

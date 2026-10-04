@@ -179,3 +179,16 @@ body {
 .delete-button:hover {
   background: #f1f0ff;
 }
+
+.import-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2rem);
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  color: #1b1b1f;
+  font-size: 0.875rem;
+  text-align: center;
+}
