@@ -1,12 +1,12 @@
-# 0010 Export GCode
+# 0011 Export GCode
 
 ## What
 
 A person can download the drawing as GCode for the landscape sheet.
 
-The menu from 0009 gains a second action, Export GCode. It downloads `drawing.gcode`. A pure function in `src/scene/` builds the string. The scene is unchanged. The action is a quiet text button, like Export SVG.
+The menu from 0010 gains a second action, Export GCode. It downloads `drawing.gcode`. A pure function in `src/scene/` builds the string. The scene is unchanged. The action is a quiet text button, like Export SVG.
 
-The written points are the list from 0009: stored points, plus the first point again when `closed` is true. Coordinates are the scene numbers. Y is not flipped. Nothing scales, pads, or recenters them.
+The written points are the list from 0010: stored points, plus the first point again when `closed` is true. Coordinates are the scene numbers. Y is not flipped. Nothing scales, pads, or recenters them.
 
 The file starts with one feed line, `G1 F3000`. Then each polyline with two or more points is:
 
@@ -35,7 +35,7 @@ CONCEPT.md says landscape GCode uses the millimeter numbers unchanged, with the 
 
 Line-weaver's command defaults are the strings this file hardcodes: `M5`, `M3 S1000`, `G1 F3000`, `G4 P0.5`. Its header comment, its opening pen cycle, and its final `G0 X0 Y0` are not in CONCEPT.md. Leaving them out keeps the file to the motion CONCEPT.md describes. The pause string is written after pen down and after pen up, which is the move it belongs to. A preferences form for those strings is the menu item DESIGN.md names and does not specify. Constants are the whole setting for this prototype.
 
-The written point list is the one from 0009, still Y-up. Running the SVG Y flip here would send the pen to the wrong side of the bed.
+The written point list is the one from 0010, still Y-up. Running the SVG Y flip here would send the pen to the wrong side of the bed.
 
 Reorder is allowed by CONCEPT.md and is not required. Building it now is the travel optimizer YAGNI says to skip. Scene order is the plot order.
 

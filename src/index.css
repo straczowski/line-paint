@@ -77,7 +77,9 @@ body {
   cursor: pointer;
 }
 
-.tool-button svg {
+.tool-button svg,
+.finish-button svg,
+.choice-button svg {
   width: 1rem;
   height: 1rem;
   display: block;
@@ -93,32 +95,42 @@ body {
 }
 
 .finish-button {
+  width: 2rem;
   height: 2rem;
-  padding: 0 0.75rem;
+  padding: 0;
   border: none;
   border-radius: 0.5rem;
   background: #6965db;
   color: #ffffff;
-  font: inherit;
+  display: grid;
+  place-items: center;
   cursor: pointer;
 }
 
-.finish-button:hover {
+.finish-button:hover:not(:disabled) {
   background: #5753d0;
 }
 
-.finish-button:active {
+.finish-button:active:not(:disabled) {
   background: #5b57d1;
 }
 
+.finish-button:disabled {
+  background: transparent;
+  color: #999999;
+  cursor: default;
+}
+
 .choice-button {
+  width: 2rem;
   height: 2rem;
-  padding: 0 0.75rem;
+  padding: 0;
   border: none;
   border-radius: 0.5rem;
   background: transparent;
   color: #1b1b1f;
-  font: inherit;
+  display: grid;
+  place-items: center;
   cursor: pointer;
 }
 

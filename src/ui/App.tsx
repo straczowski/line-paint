@@ -1,3 +1,4 @@
+import { RiCheckLine, RiCircleLine, RiRouteLine } from '@remixicon/react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
@@ -109,8 +110,13 @@ export function App() {
       )}
       <div className="top-islands">
         <ToolIsland tool={tool} onTool={chooseTool} />
-        {draftPoints.length > 0 && <FinishIsland onFinish={finishDraft} />}
-        {selectedPolyline && (
+        {tool === 'polyline' && (
+          <FinishIsland
+            enabled={draftPoints.length > 0}
+            onFinish={finishDraft}
+          />
+        )}
+        {tool === 'select' && selectedPolyline && (
           <ClosedIsland
             closed={selectedPolyline.closed}
             onClosed={closeSelected}
@@ -884,11 +890,17 @@ function PolylineIcon() {
   )
 }
 
-function FinishIsland({ onFinish }: FinishIslandProps) {
+function FinishIsland({ enabled, onFinish }: FinishIslandProps) {
   return (
     <div className="island property-island">
-      <button type="button" className="finish-button" onClick={onFinish}>
-        Finish
+      <button
+        type="button"
+        className="finish-button"
+        aria-label="Finish"
+        disabled={!enabled}
+        onClick={onFinish}
+      >
+        <RiCheckLine />
       </button>
     </div>
   )
@@ -917,25 +929,35 @@ function ClosedIsland({ closed, onClosed }: ClosedIslandProps) {
         label="Open"
         pressed={!closed}
         onPress={() => onClosed(false)}
-      />
+      >
+        <RiRouteLine />
+      </ChoiceButton>
       <ChoiceButton
         label="Closed"
         pressed={closed}
         onPress={() => onClosed(true)}
-      />
+      >
+        <RiCircleLine />
+      </ChoiceButton>
     </div>
   )
 }
 
-function ChoiceButton({ label, pressed, onPress }: ChoiceButtonProps) {
+function ChoiceButton({
+  label,
+  pressed,
+  onPress,
+  children,
+}: ChoiceButtonProps) {
   return (
     <button
       type="button"
       className="choice-button"
+      aria-label={label}
       aria-pressed={pressed}
       onClick={onPress}
     >
-      {label}
+      {children}
     </button>
   )
 }
@@ -1053,6 +1075,7 @@ type ToolButtonProps = {
 }
 
 type FinishIslandProps = {
+  enabled: boolean
   onFinish: () => void
 }
 
@@ -1065,4 +1088,5 @@ type ChoiceButtonProps = {
   label: string
   pressed: boolean
   onPress: () => void
+  children: ReactNode
 }
