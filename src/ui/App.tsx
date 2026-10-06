@@ -20,11 +20,13 @@ import {
   duplicatePolylines,
   movePolylinePoint,
   pointerTarget,
+  hiddenPolylineIds,
+  sceneWithoutHiddenPolylines,
   selectionBounds,
   touchedPolylineIds,
   translatePolylines,
 } from '../scene/selection'
-import type { PointDelete, SelectionBounds } from '../scene/selection'
+import type { DragHide, PointDelete, SelectionBounds } from '../scene/selection'
 import { gcodeDocument, svgDocument } from '../scene/export'
 import { polylinesFromSvg } from '../scene/import'
 import type { ImportedPolyline } from '../scene/import'
@@ -89,7 +91,7 @@ export function App() {
     staticCanvasRef,
     scene,
     windowSize,
-    hiddenPolylineKey(gesture),
+    hiddenPolylineKey(gesture, altHeld),
   )
   useOverlayPicture(
     overlayCanvasRef,
@@ -270,30 +272,41 @@ function useFinishedPicture(
 
     paintStaticCanvas({
       context: requireContext(canvasRef.current, 'Static'),
-      scene: sceneWithoutHiddenKey(scene, hiddenKey),
+      scene: sceneWithoutHiddenPolylines(scene, idsInHiddenKey(hiddenKey)),
       fit: fitSheet(windowSize),
       size: windowSize,
     })
   }, [canvasRef, hiddenKey, scene, windowSize])
 }
 
-function hiddenPolylineKey(gesture: SelectGesture | undefined): string {
-  if (gesture?.kind === 'point') {
-    return gesture.id
-  }
-  if (gesture?.kind === 'scale') {
-    return gesture.ids.join(',')
-  }
-  return ''
+function hiddenPolylineKey(
+  gesture: SelectGesture | undefined,
+  altHeld: boolean,
+): string {
+  return hiddenPolylineIds(dragHide(gesture, altHeld)).join(',')
 }
 
-function sceneWithoutHiddenKey(scene: Scene, hiddenKey: string): Scene {
-  if (!hiddenKey) {
-    return scene
+function dragHide(
+  gesture: SelectGesture | undefined,
+  altHeld: boolean,
+): DragHide | undefined {
+  if (gesture?.kind === 'point') {
+    return { kind: 'point', ids: [gesture.id], altHeld }
   }
+  if (gesture?.kind === 'scale') {
+    return { kind: 'scale', ids: gesture.ids, altHeld }
+  }
+  if (gesture?.kind === 'move') {
+    return { kind: 'move', ids: gesture.ids, altHeld }
+  }
+  return undefined
+}
 
-  const hidden = new Set(hiddenKey.split(','))
-  return scene.filter((polyline) => !hidden.has(polyline.id))
+function idsInHiddenKey(hiddenKey: string): readonly string[] {
+  if (!hiddenKey) {
+    return []
+  }
+  return hiddenKey.split(',')
 }
 
 function useOverlayPicture(

@@ -9,6 +9,8 @@ import {
   selectionBounds,
   touchedPolylineIds,
   duplicatePolylines,
+  hiddenPolylineIds,
+  sceneWithoutHiddenPolylines,
   translatePolylines,
 } from './selection'
 
@@ -290,6 +292,48 @@ describe('duplicatePolylines', () => {
     expect(
       duplicatePolylines(scene, { ids: [], newIds: [], delta: point(1, 1) }),
     ).toBe(scene)
+  })
+})
+
+describe('hiddenPolylineIds', () => {
+  const scene = [
+    stroke('a', [point(0, 0), point(10, 0)]),
+    stroke('b', [point(0, 20), point(10, 20)]),
+    stroke('c', [point(0, 40), point(10, 40)]),
+  ]
+
+  it('omits a moving selection from the static canvas', () => {
+    const hidden = hiddenPolylineIds({
+      kind: 'move',
+      ids: ['a', 'c'],
+      altHeld: false,
+    })
+    const visible = sceneWithoutHiddenPolylines(scene, hidden)
+
+    expect(hidden).toEqual(['a', 'c'])
+    expect(visible.map((polyline) => polyline.id)).toEqual(['b'])
+    expect(visible[0]).toBe(scene[1])
+  })
+
+  it('keeps the originals on the static canvas while alt is held', () => {
+    const hidden = hiddenPolylineIds({
+      kind: 'move',
+      ids: ['a', 'c'],
+      altHeld: true,
+    })
+
+    expect(hidden).toEqual([])
+    expect(sceneWithoutHiddenPolylines(scene, hidden)).toBe(scene)
+  })
+
+  it('still omits a point drag and a scale drag when alt is held', () => {
+    expect(
+      hiddenPolylineIds({ kind: 'point', ids: ['a'], altHeld: true }),
+    ).toEqual(['a'])
+    expect(
+      hiddenPolylineIds({ kind: 'scale', ids: ['a', 'b'], altHeld: true }),
+    ).toEqual(['a', 'b'])
+    expect(hiddenPolylineIds(undefined)).toEqual([])
   })
 })
 

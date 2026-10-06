@@ -79,6 +79,28 @@ export function deletePolylines(
   return next.length === scene.length ? scene : next
 }
 
+export function hiddenPolylineIds(
+  drag: DragHide | undefined,
+): readonly string[] {
+  if (!drag || (drag.kind === 'move' && drag.altHeld)) {
+    return []
+  }
+  return drag.ids
+}
+
+export function sceneWithoutHiddenPolylines(
+  scene: readonly Polyline[],
+  ids: readonly string[],
+): readonly Polyline[] {
+  if (ids.length === 0) {
+    return scene
+  }
+
+  const hidden = new Set(ids)
+  const next = scene.filter((polyline) => !hidden.has(polyline.id))
+  return next.length === scene.length ? scene : next
+}
+
 export function pointerTarget(
   scene: readonly Polyline[],
   point: Point,
@@ -420,6 +442,12 @@ export type SelectionBounds = {
   maxX: number
   minY: number
   maxY: number
+}
+
+export type DragHide = {
+  kind: 'move' | 'point' | 'scale'
+  ids: readonly string[]
+  altHeld: boolean
 }
 
 type Rectangle = SelectionBounds
