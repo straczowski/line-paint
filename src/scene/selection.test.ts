@@ -3,6 +3,7 @@ import type { Point, Polyline } from './polyline'
 import {
   deletePolylinePoint,
   deletePolylines,
+  insertPolylinePoint,
   movePolylinePoint,
   pointerTarget,
   polylineAt,
@@ -205,6 +206,58 @@ describe('deletePolylinePoint', () => {
 
     expect(next).toHaveLength(1)
     expect(next[0]).toBe(scene[1])
+  })
+})
+
+describe('insertPolylinePoint', () => {
+  it('inserts the closest point on an open segment and keeps the other points', () => {
+    const scene = [
+      stroke('edit', [point(0, 0), point(0, 40), point(40, 40)]),
+      stroke('stay', [point(5, 5), point(6, 6)]),
+    ]
+    const inserted = insertPolylinePoint(scene, {
+      id: 'edit',
+      point: point(2, 20),
+    })
+
+    expect(inserted?.index).toBe(1)
+    expect(inserted?.scene[0]?.points).toEqual([
+      point(0, 0),
+      point(0, 20),
+      point(0, 40),
+      point(40, 40),
+    ])
+    expect(inserted?.scene[0]?.closed).toBe(false)
+    expect(inserted?.scene[0]?.stroke).toBe('#1e1e1e')
+    expect(inserted?.scene[0]?.widthMm).toBe(0.3)
+    expect(inserted?.scene[1]).toBe(scene[1])
+    expect(scene[0]?.points).toHaveLength(3)
+  })
+
+  it('appends a point on the closing segment', () => {
+    const square = [point(0, 0), point(10, 0), point(10, 10), point(0, 10)]
+    const scene = [stroke('box', square, true)]
+    const inserted = insertPolylinePoint(scene, {
+      id: 'box',
+      point: point(-2, 5),
+    })
+
+    expect(inserted?.index).toBe(4)
+    expect(inserted?.scene[0]?.points).toEqual([...square, point(0, 5)])
+    expect(inserted?.scene[0]?.closed).toBe(true)
+    expect(inserted?.scene[0]?.points[0]).toEqual(point(0, 0))
+  })
+
+  it('does not insert when the pointer misses the segment or hits a handle', () => {
+    const scene = [stroke('edit', [point(0, 0), point(0, 40)])]
+
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(3.1, 20) }),
+    ).toBeUndefined()
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(2, 0) }),
+    ).toBeUndefined()
+    expect(scene[0]?.points).toHaveLength(2)
   })
 })
 

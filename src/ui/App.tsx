@@ -18,6 +18,7 @@ import {
   deletePolylinePoint,
   deletePolylines,
   duplicatePolylines,
+  insertPolylinePoint,
   movePolylinePoint,
   pointerTarget,
   hiddenPolylineIds,
@@ -497,8 +498,36 @@ function beginPointEdit(
 
   input.gestureRef.current = undefined
   input.setGesture(undefined)
+  if (insertEditedPoint(input, located.scene, target.id)) {
+    return
+  }
+
   input.setSelectedIds([target.id])
   input.setPointEdit({ id: target.id, pointIndex: undefined })
+}
+
+function insertEditedPoint(
+  input: SheetPointerInput,
+  point: Point,
+  targetId: string,
+): boolean {
+  const editingId = input.pointEdit?.id
+  if (!editingId || editingId !== targetId) {
+    return false
+  }
+
+  const inserted = insertPolylinePoint(input.scene, {
+    id: editingId,
+    point,
+  })
+  if (!inserted) {
+    return false
+  }
+
+  input.setScene(inserted.scene)
+  input.setSelectedIds([editingId])
+  input.setPointEdit({ id: editingId, pointIndex: inserted.index })
+  return true
 }
 
 function moveSheetPointer(

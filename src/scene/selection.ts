@@ -149,6 +149,31 @@ export function deletePolylinePoint(
   return replacePolyline(scene, { ...polyline, points })
 }
 
+export function insertPolylinePoint(
+  scene: readonly Polyline[],
+  insert: PointInsert,
+): PointInsertion | undefined {
+  const polyline = requirePolyline(scene, insert.id)
+  if (pointIndexAt(polyline, insert.point) !== undefined) {
+    return undefined
+  }
+
+  const placement = segmentPlacement(polyline, insert.point)
+  if (!placement) {
+    return undefined
+  }
+
+  const points = [
+    ...polyline.points.slice(0, placement.index),
+    placement.point,
+    ...polyline.points.slice(placement.index),
+  ]
+  return {
+    scene: replacePolyline(scene, { ...polyline, points }),
+    index: placement.index,
+  }
+}
+
 function pointIndexAt(polyline: Polyline, point: Point): number | undefined {
   let closestIndex: number | undefined
   let closestDistance = hitSlopMm
@@ -259,22 +284,76 @@ function segmentsOf(polyline: Polyline): readonly Segment[] {
   return segments
 }
 
+function segmentPlacement(
+  polyline: Polyline,
+  point: Point,
+): SegmentPlacement | undefined {
+  let closestIndex = -1
+  let closestPoint: Point | undefined
+  let closestDistance = hitSlopMm
+  const segments = segmentsOf(polyline)
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]
+    if (!segment) {
+      continue
+    }
+
+    const nearest = nearestPointOnSegment(point, segment)
+    if (isSegmentEndpoint(nearest, segment)) {
+      continue
+    }
+
+    const distance = distanceBetween(point, nearest)
+    if (distance > closestDistance) {
+      continue
+    }
+
+    closestDistance = distance
+    closestIndex = index
+    closestPoint = nearest
+  }
+
+  if (!closestPoint || closestIndex < 0) {
+    return undefined
+  }
+
+  return {
+    index: insertIndex(polyline, closestIndex),
+    point: closestPoint,
+  }
+}
+
+function insertIndex(polyline: Polyline, segmentIndex: number): number {
+  if (segmentIndex < polyline.points.length - 1) {
+    return segmentIndex + 1
+  }
+  return polyline.points.length
+}
+
+function isSegmentEndpoint(point: Point, segment: Segment): boolean {
+  return samePoint(point, segment.start) || samePoint(point, segment.end)
+}
+
 function distanceToSegment(point: Point, segment: Segment): number {
+  return distanceBetween(point, nearestPointOnSegment(point, segment))
+}
+
+function nearestPointOnSegment(point: Point, segment: Segment): Point {
   const dx = segment.end.x - segment.start.x
   const dy = segment.end.y - segment.start.y
   const lengthSquared = dx * dx + dy * dy
   if (lengthSquared === 0) {
-    return distanceBetween(point, segment.start)
+    return segment.start
   }
 
   const t = clamp01(
     ((point.x - segment.start.x) * dx + (point.y - segment.start.y) * dy) /
       lengthSquared,
   )
-  return distanceBetween(point, {
+  return {
     x: segment.start.x + t * dx,
     y: segment.start.y + t * dy,
-  })
+  }
 }
 
 function distanceBetween(start: Point, end: Point): number {
@@ -437,6 +516,16 @@ export type PointDelete = {
   index: number
 }
 
+export type PointInsert = {
+  id: string
+  point: Point
+}
+
+export type PointInsertion = {
+  scene: readonly Polyline[]
+  index: number
+}
+
 export type SelectionBounds = {
   minX: number
   maxX: number
@@ -455,4 +544,9 @@ type Rectangle = SelectionBounds
 type Segment = {
   start: Point
   end: Point
+}
+
+type SegmentPlacement = {
+  index: number
+  point: Point
 }
