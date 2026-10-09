@@ -37,10 +37,27 @@ Redraw the static canvas when the scene changes. Redraw the overlay when the sel
 
 ## Modules
 
-Product code replaces the Vite hello screen. Until then, `src/` is still that template.
-
-- `src/scene/` — elements, viewport math, and edits. Vitest covers this folder. These modules must not import React or touch `document`.
+- `src/scene/` — elements, viewport math, and edits. These modules must not import React or touch `document`.
 - `src/render/` — paints a scene onto a `CanvasRenderingContext2D`. This is the only place that knows about canvas pixels.
-- `src/ui/` — React islands: tools, menu, zoom. It calls into `src/scene/` and never writes canvas pixels itself.
+- `src/ui/` — React state, pointer gestures, and islands. It calls into `src/scene/` and never writes canvas pixels itself. A ui module that only computes values stays free of React and `document`.
+
+Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.test.ts`.
+
+| Change | File |
+| --- | --- |
+| Hit-test, move, duplicate, point edit | `src/scene/selection.ts` |
+| Scale math | `src/scene/scale.ts` |
+| SVG parse | `src/scene/import.ts` |
+| SVG and GCode text | `src/scene/export.ts` |
+| Shift lock | `src/scene/ruler.ts` |
+| Commit a polyline, open or closed | `src/scene/polyline.ts` |
+| Sheet size, fit, scene Y | `src/scene/sheet.ts` |
+| Pixels | `src/render/paint-sheet.ts` |
+| Scene state and canvas hooks | `src/ui/App.tsx` |
+| Pointer gestures | `src/ui/sheet-pointer.ts` |
+| Overlay frame for the stroke being drawn | `src/ui/overlay-frame.ts` |
+| Keyboard commands | `src/ui/commands.ts` |
+| Toolbar and menu | `src/ui/islands.tsx` |
+| Import, export, and SVG drop | `src/ui/files.ts` |
 
 Zod is allowed. Use it when data crosses a boundary, such as a file being imported. React state is enough to hold the active tool and to pass the scene into the canvases. No state library, router, or CSS framework unless a spec asks for one. Another library is added only when the user asks for it.

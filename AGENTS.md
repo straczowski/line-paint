@@ -14,7 +14,7 @@ Related software: [line-weaver](https://github.com/straczowski/line-weaver/). Lo
 
 - TypeScript, React, Vite, Vitest, Zod
 - Frontend only. No backend, no API server, no deploy base path yet.
-- The current `src/` tree is the Vite React TypeScript hello screen so the project builds. It is not product code.
+- Product code lives in `src/scene/`, `src/render/`, and `src/ui/`. `docs/ARCHITECTURE.md` says which file a change belongs in.
 - Zod is allowed. Do not add Tailwind, Zustand, a router, or any other library unless the user asks.
 - Git remote is `git@github.com:straczowski/line-paint.git`, branch `main`. Do not run `git init` again.
 
@@ -40,6 +40,7 @@ If the user asks for something the docs do not already require, question it befo
 | `docs/laws-of-software/` | Local copies of YAGNI, KISS, and premature optimization. Read all of them before coding. |
 | `spec/` | Numbered feature history. One markdown file per feature, written before code. |
 | `.agents/skills/write-spec/` | Procedure for writing the next spec and stopping until it is read. |
+| `.agents/skills/review-architecture/` | Procedure for revisiting structure. Review only. No product code in that turn. |
 
 `docs/DESIGN.md` is the source of truth for look and interaction. `docs/ARCHITECTURE.md` is the source of truth for structure. `docs/CONCEPT.md` is the source of truth for what the app does. `docs/CODING.md` is the source of truth for coding.
 

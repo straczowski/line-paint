@@ -33,6 +33,7 @@ When a polyline is selected, the left panel has one toggle: open or closed. Clos
 - Drag on empty canvas to draw a rectangle. Every polyline that rectangle touches is selected.
 - Double-click a polyline to edit its points. In that mode a point can be dragged, and Backspace deletes the selected point.
 - A drag that ends while Alt is held duplicates the polyline and leaves the copy where the drag ends.
+- Drag a corner or a side of the selection rectangle to scale the selected polylines. Rotate is not part of this.
 
 ## Groups
 
@@ -53,13 +54,16 @@ GCode, same idea as line-weaver's `generateGcode` and `convertToGcodeCommands`:
 - Command strings for pen up, pen down, feed, and pause stay machine settings, as in line-weaver's `GcodeCommandSettings`
 - Line-weaver also reorders polylines to shorten pen-up travel. That reorder is allowed here. It must not move the points
 
+## Import
+
+The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import replaces the polylines on the sheet.
+
 ## Later
 
-Not part of the first tool:
+Not part of the current drawing tool:
 
 - Rectangles, circles, and other shapes
-- Rotate and scale a polyline
-- Import SVG, using the format line-weaver writes
+- Rotate a polyline
 - Portrait. Same origin: bottom-left, Y up, on a sheet 210 mm wide and 297 mm tall. The plotter bed stays landscape, so GCode export rotates the points 90° onto that bed. The rotation is not a mirror. Which way the paper turns is chosen when portrait is built
 - A control for sheet size
 - A background image for tracing
