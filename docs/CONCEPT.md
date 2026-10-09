@@ -35,10 +35,6 @@ When a polyline is selected, the left panel has one toggle: open or closed. Clos
 - A drag that ends while Alt is held duplicates the polyline and leaves the copy where the drag ends.
 - Drag a corner or a side of the selection rectangle to scale the selected polylines. Rotate is not part of this.
 
-## Groups
-
-Selected polylines can be grouped and ungrouped. A group selects and moves as one object. Nested groups are not part of this concept.
-
 ## Export
 
 Two buttons: Export SVG and Export GCode. Both read the polylines. Neither scales, pads, nor recenters them. Line-weaver scales pixel art onto a sheet (`scalePolylines` in `src/core/gcode/scale-polylines.ts`). This app must not, because the points are already millimeters.
@@ -62,6 +58,7 @@ The menu can import an SVG this app writes, or one line-weaver writes. Any other
 
 Not part of the current drawing tool:
 
+- Selected polylines can be grouped and ungrouped. A group selects and moves as one object. Nested groups are not part of this concept.
 - Rectangles, circles, and other shapes
 - Rotate a polyline
 - Portrait. Same origin: bottom-left, Y up, on a sheet 210 mm wide and 297 mm tall. The plotter bed stays landscape, so GCode export rotates the points 90° onto that bed. The rotation is not a mirror. Which way the paper turns is chosen when portrait is built

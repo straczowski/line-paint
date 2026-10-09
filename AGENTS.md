@@ -20,7 +20,7 @@ Related software: [line-weaver](https://github.com/straczowski/line-weaver/). Lo
 
 ## Before any code change
 
-Read [docs/CODING.md](docs/CODING.md). Then read every file in [docs/engineering-principles](docs/engineering-principles/) and every file in [docs/laws-of-software](docs/laws-of-software/). Do not edit code until all three are loaded. CODING.md decides whether a line should exist. The engineering principles decide how to write it. The laws decide what not to add.
+Read [docs/CODING.md](docs/CODING.md). A local edit then reads the one file in [docs/engineering-principles](docs/engineering-principles/) or [docs/laws-of-software](docs/laws-of-software/) that governs the change, and names that file. Do not load the other files in those folders for the edit. CODING.md decides whether a line should exist. The named file decides how the line is written, or what not to add.
 
 A new feature starts as a numbered spec. Follow [.agents/skills/write-spec/SKILL.md](.agents/skills/write-spec/SKILL.md). Write `spec/NNNN-title.md`, then stop. Do not write product code until the user has read that spec and said to proceed.
 
@@ -36,8 +36,8 @@ If the user asks for something the docs do not already require, question it befo
 | `docs/DESIGN.md` | Source of truth for look and interaction. |
 | `docs/CONCEPT.md` | Source of truth for product scope. |
 | `docs/CODING.md` | Source of truth for whether and how to write code. |
-| `docs/engineering-principles/` | Binding rules for the shape of a line. Read all of them before coding. |
-| `docs/laws-of-software/` | Local copies of YAGNI, KISS, and premature optimization. Read all of them before coding. |
+| `docs/engineering-principles/` | Binding rules for the shape of a line. |
+| `docs/laws-of-software/` | Local copies of YAGNI, KISS, and premature optimization. |
 | `spec/` | Numbered feature history. One markdown file per feature, written before code. |
 | `.agents/skills/write-spec/` | Procedure for writing the next spec and stopping until it is read. |
 | `.agents/skills/review-architecture/` | Procedure for revisiting structure. Review only. No product code in that turn. |

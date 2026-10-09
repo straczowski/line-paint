@@ -1,8 +1,8 @@
 # Coding
 
-Read this file before any code change. Then read every file in [engineering-principles](engineering-principles/). Those files are the rules for how a line is written. This file is the rule for whether the line should exist.
+Read this file before any code change. Then read the one file in [engineering-principles](engineering-principles/) or [laws-of-software](laws-of-software/) that governs the edit, and name that file. The principle files are the rules for how a line is written. This file is the rule for whether the line should exist.
 
-Do not start editing until both are loaded. Do not replace those files with a summary.
+Do not start editing until this file and that one file are loaded. Do not replace those files with a summary. Do not read the rest of those folders for the edit.
 
 ## Engineering principles
 
@@ -26,7 +26,7 @@ Slop includes a wrapper around one call, a generic helper with one use, a parame
 
 ## Three laws
 
-Apply these before opening a file. Read the local copy. Do not fetch the website.
+Open one of these when it is the file the edit needs. Do not fetch the website.
 
 - [YAGNI](laws-of-software/yagni.md). Build only what the current request needs. The "Later" section of CONCEPT.md is a list of things not to build.
 - [KISS](laws-of-software/kiss.md). Prefer the smallest change that does the job. Do not add a framework, a layer, or an abstraction for a single use.

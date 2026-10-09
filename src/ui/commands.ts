@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Point } from '../scene/polyline'
 import {
@@ -105,8 +105,18 @@ export function useCommandDuplicate(
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>,
 ): void {
-  const latest = useRef({ selectedIds, duplicateDelta })
-  latest.current = { selectedIds, duplicateDelta }
+  const [latest] = useState(() => {
+    let current = { selectedIds, duplicateDelta }
+    return {
+      read() {
+        return current
+      },
+      write(nextIds: readonly string[], nextDelta: Point | undefined) {
+        current = { selectedIds: nextIds, duplicateDelta: nextDelta }
+      },
+    }
+  })
+  latest.write(selectedIds, duplicateDelta)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -115,14 +125,14 @@ export function useCommandDuplicate(
       }
 
       event.preventDefault()
-      const selection = latest.current
+      const selection = latest.read()
       if (event.repeat || selection.selectedIds.length === 0) {
         return
       }
 
       const delta = nextDuplicateDelta(selection.duplicateDelta)
       const newIds = selection.selectedIds.map(() => crypto.randomUUID())
-      latest.current = { selectedIds: newIds, duplicateDelta: delta }
+      latest.write(newIds, delta)
       setScene((current) =>
         duplicatePolylines(current, {
           ids: selection.selectedIds,
