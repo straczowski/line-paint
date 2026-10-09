@@ -300,7 +300,7 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     if (event.detail > 1) {
       return
     }
-    finishPress(gesture, input)
+    finishPress(gesture, input, event.shiftKey)
     return
   }
   if (gesture.kind === 'marquee') {
@@ -377,7 +377,11 @@ function replaceSelection(
   input.setSelectedIds(nextIds)
 }
 
-function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
+function finishPress(
+  gesture: PressGesture,
+  input: SheetPointerInput,
+  shiftHeld: boolean,
+): void {
   if (gesture.scaleHandle) {
     return
   }
@@ -387,7 +391,14 @@ function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
     return
   }
   if (gesture.hitId) {
-    replaceSelection(input, [gesture.hitId])
+    replaceSelection(
+      input,
+      selectionAfterPolylineClick(
+        input.selectedIds,
+        gesture.hitId,
+        shiftHeld && input.pointEdit === undefined,
+      ),
+    )
     if (gesture.hitId !== input.pointEdit?.id) {
       input.setPointEdit(undefined)
     }
@@ -396,6 +407,20 @@ function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
 
   replaceSelection(input, [])
   input.setPointEdit(undefined)
+}
+
+export function selectionAfterPolylineClick(
+  selectedIds: readonly string[],
+  hitId: string,
+  shiftHeld: boolean,
+): readonly string[] {
+  if (!shiftHeld) {
+    return [hitId]
+  }
+  if (selectedIds.includes(hitId)) {
+    return selectedIds
+  }
+  return [...selectedIds, hitId]
 }
 
 function moveEditedPoint(

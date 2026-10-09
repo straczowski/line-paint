@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Point } from '../scene/polyline'
-import { advanceGesture } from './sheet-pointer'
+import { advanceGesture, selectionAfterPolylineClick } from './sheet-pointer'
 import type { PressGesture, SelectGesture } from './sheet-pointer'
 
 describe('advanceGesture', () => {
@@ -87,6 +87,26 @@ describe('advanceGesture', () => {
       gesture: { ...gesture, currentScene: point(4, 5) },
       selectedIds: ['line'],
     })
+  })
+})
+
+describe('selectionAfterPolylineClick', () => {
+  it('appends the clicked polyline when shift is held', () => {
+    expect(selectionAfterPolylineClick(['line'], 'other', true)).toEqual([
+      'line',
+      'other',
+    ])
+  })
+
+  it('keeps the selection when that polyline is already selected', () => {
+    const selected = ['line', 'other']
+    expect(selectionAfterPolylineClick(selected, 'other', true)).toBe(selected)
+  })
+
+  it('replaces the selection when shift is up', () => {
+    expect(
+      selectionAfterPolylineClick(['line', 'other'], 'line', false),
+    ).toEqual(['line'])
   })
 })
 
