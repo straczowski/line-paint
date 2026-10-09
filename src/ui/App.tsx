@@ -93,7 +93,7 @@ export function App() {
     staticCanvasRef,
     scene,
     windowSize,
-    hiddenPolylineKey(gesture, altHeld),
+    hiddenPolylineKey(selectedIds, gesture, altHeld),
   )
   useOverlayPicture(
     overlayCanvasRef,

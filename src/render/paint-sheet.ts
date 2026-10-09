@@ -47,7 +47,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
     paintStroke(context, {
       points: pointsWithClosingSegment(stroke.points, stroke.closed),
       fit,
-      color: defaultPolylineStroke,
+      color: selectionColor,
       widthMm: stroke.widthMm,
     })
   }
@@ -63,33 +63,21 @@ export function paintOverlay(input: PaintOverlayInput): void {
   paintHandles(context, handles, fit)
 }
 
-function matchCanvasSize(
-  context: CanvasRenderingContext2D,
-  size: WindowSize,
-): void {
+function matchCanvasSize(context: SheetContext, size: WindowSize): void {
   context.canvas.width = size.width
   context.canvas.height = size.height
 }
 
-function clearCanvas(
-  context: CanvasRenderingContext2D,
-  size: WindowSize,
-): void {
+function clearCanvas(context: SheetContext, size: WindowSize): void {
   context.fillStyle = canvasWhite
   context.fillRect(0, 0, size.width, size.height)
 }
 
-function clearOverlay(
-  context: CanvasRenderingContext2D,
-  size: WindowSize,
-): void {
+function clearOverlay(context: SheetContext, size: WindowSize): void {
   context.clearRect(0, 0, size.width, size.height)
 }
 
-function strokeSheetBorder(
-  context: CanvasRenderingContext2D,
-  fit: SheetFit,
-): void {
+function strokeSheetBorder(context: SheetContext, fit: SheetFit): void {
   const topLeft = scenePointToCanvas({ x: 0, y: sheetHeightMm }, fit)
   const bottomRight = scenePointToCanvas({ x: sheetWidthMm, y: 0 }, fit)
   const left = alignHairline(topLeft.x)
@@ -106,7 +94,7 @@ function alignHairline(pixel: number): number {
 }
 
 function strokeSelectionBounds(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   paint: BoundsPaint,
 ): void {
   const topLeft = scenePointToCanvas(
@@ -128,7 +116,7 @@ function strokeSelectionBounds(
 }
 
 function paintScaleHandles(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   bounds: SelectionBounds,
   fit: SheetFit,
 ): void {
@@ -155,7 +143,7 @@ function scaleCorners(bounds: SelectionBounds): readonly Point[] {
 }
 
 function paintHandles(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   handles: readonly Handle[],
   fit: SheetFit,
 ): void {
@@ -174,7 +162,7 @@ function paintHandles(
 const handleRadiusPx = 4
 
 function paintHandle(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   handle: Handle,
   fit: SheetFit,
 ): void {
@@ -188,10 +176,7 @@ function paintHandle(
   context.stroke()
 }
 
-function strokeMarquee(
-  context: CanvasRenderingContext2D,
-  marquee: MarqueePaint,
-): void {
+function strokeMarquee(context: SheetContext, marquee: MarqueePaint): void {
   const start = scenePointToCanvas(marquee.start, marquee.fit)
   const end = scenePointToCanvas(marquee.end, marquee.fit)
   context.strokeStyle = selectionColor
@@ -216,10 +201,7 @@ export function pointsWithClosingSegment(
   return [...points, first]
 }
 
-function paintStroke(
-  context: CanvasRenderingContext2D,
-  stroke: DrawnStroke,
-): void {
+function paintStroke(context: SheetContext, stroke: DrawnStroke): void {
   const first = stroke.points[0]
   if (!first) {
     return
@@ -235,7 +217,7 @@ function paintStroke(
 }
 
 function applyPen(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   color: string,
   widthMm: number,
   scale: number,
@@ -248,7 +230,7 @@ function applyPen(
 }
 
 function fillPointMark(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   point: Point,
   fit: SheetFit,
 ): void {
@@ -265,7 +247,7 @@ function fillPointMark(
 }
 
 function strokeThrough(
-  context: CanvasRenderingContext2D,
+  context: SheetContext,
   first: Point,
   points: readonly Point[],
   fit: SheetFit,
@@ -287,20 +269,44 @@ function scenePointToCanvas(point: Point, fit: SheetFit): CanvasPoint {
   }
 }
 
+type SheetContext = {
+  canvas: { width: number; height: number }
+  fillStyle: string | CanvasGradient | CanvasPattern
+  strokeStyle: string | CanvasGradient | CanvasPattern
+  lineWidth: number
+  lineCap: CanvasLineCap
+  lineJoin: CanvasLineJoin
+  fillRect(x: number, y: number, width: number, height: number): void
+  clearRect(x: number, y: number, width: number, height: number): void
+  strokeRect(x: number, y: number, width: number, height: number): void
+  beginPath(): void
+  moveTo(x: number, y: number): void
+  lineTo(x: number, y: number): void
+  arc(
+    x: number,
+    y: number,
+    radius: number,
+    startAngle: number,
+    endAngle: number,
+  ): void
+  fill(): void
+  stroke(): void
+}
+
 const canvasWhite = '#ffffff'
 const sheetHairline = '#c5c5d0'
 const selectionColor = '#6965db'
 const minimumStrokePx = 1
 
 type PaintStaticCanvasInput = {
-  context: CanvasRenderingContext2D
+  context: SheetContext
   scene: Scene
   fit: SheetFit
   size: WindowSize
 }
 
 type PaintOverlayInput = {
-  context: CanvasRenderingContext2D
+  context: SheetContext
   draftPoints: readonly Point[]
   preview: readonly SelectionStroke[]
   bounds: SelectionBounds | undefined

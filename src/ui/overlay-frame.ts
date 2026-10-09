@@ -46,10 +46,16 @@ export function overlayFrame(
 }
 
 export function hiddenPolylineKey(
+  selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
   altHeld: boolean,
 ): string {
-  return hiddenPolylineIds(dragHide(gesture, altHeld)).join(',')
+  if (gesture?.kind === 'move' && altHeld) {
+    return ''
+  }
+
+  const dragged = hiddenPolylineIds(dragHide(gesture, altHeld))
+  return (dragged.length > 0 ? dragged : selectedIds).join(',')
 }
 
 export function idsInHiddenKey(hiddenKey: string): readonly string[] {
@@ -100,7 +106,7 @@ function overlayPreview(
   if (gesture?.kind === 'scale') {
     return scalePreview(scene, gesture, shiftHeld, altHeld)
   }
-  return movePreview(scene, selectedIds, gesture, shiftHeld)
+  return selectionPreview(scene, selectedIds, gesture, shiftHeld)
 }
 
 function pointDragPreview(
@@ -122,25 +128,22 @@ function pointDragPreview(
   ]
 }
 
-function movePreview(
+function selectionPreview(
   scene: Scene,
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
   shiftHeld: boolean,
 ): OverlayFrame['preview'] {
   const selection = activeSelection(selectedIds, gesture, shiftHeld)
-  if (!selection.delta) {
-    return []
-  }
-
-  const delta = selection.delta
   return scene.flatMap((polyline) => {
     if (!selection.ids.includes(polyline.id)) {
       return []
     }
     return [
       {
-        points: translatedPoints(polyline.points, delta),
+        points: selection.delta
+          ? translatedPoints(polyline.points, selection.delta)
+          : polyline.points,
         closed: polyline.closed,
         widthMm: polyline.widthMm,
       },
