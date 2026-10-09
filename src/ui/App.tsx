@@ -18,9 +18,9 @@ import {
   useSelectBackspace,
 } from './commands'
 import {
+  appendImportedPolylines,
   downloadTextFile,
   loadSvgFile,
-  polylineWithNewId,
   useImportToast,
   useSvgDrop,
 } from './files'
@@ -176,7 +176,7 @@ export function App() {
   }
 
   const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
-    setScene(polylines.map(polylineWithNewId))
+    setScene((current) => appendImportedPolylines(current, polylines))
     setSelectedIds([])
     setDuplicateDelta(undefined)
     setPointEdit(undefined)

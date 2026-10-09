@@ -94,7 +94,14 @@ export function downloadTextFile(
   URL.revokeObjectURL(url)
 }
 
-export function polylineWithNewId(polyline: ImportedPolyline): Polyline {
+export function appendImportedPolylines(
+  scene: readonly Polyline[],
+  imported: readonly ImportedPolyline[],
+): readonly Polyline[] {
+  return [...scene, ...imported.map(polylineWithNewId)]
+}
+
+function polylineWithNewId(polyline: ImportedPolyline): Polyline {
   return {
     id: crypto.randomUUID(),
     points: polyline.points,

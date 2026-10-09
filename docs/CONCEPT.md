@@ -52,7 +52,7 @@ GCode, same idea as line-weaver's `generateGcode` and `convertToGcodeCommands`:
 
 ## Import
 
-The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import replaces the polylines on the sheet.
+The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet.
 
 ## Later
 
