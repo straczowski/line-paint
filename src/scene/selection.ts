@@ -66,6 +66,23 @@ export function duplicatePolylines(
   return [...scene, ...copies]
 }
 
+export function nextDuplicateDelta(stored: Point | undefined): Point {
+  return stored ?? freshDuplicateDelta
+}
+
+const freshDuplicateDelta: Point = { x: 10, y: 10 }
+
+export function duplicateDeltaAfterSelection(
+  stored: Point | undefined,
+  previousIds: readonly string[],
+  nextIds: readonly string[],
+): Point | undefined {
+  if (sameSelection(previousIds, nextIds)) {
+    return stored
+  }
+  return undefined
+}
+
 export function deletePolylines(
   scene: readonly Polyline[],
   ids: readonly string[],
@@ -219,6 +236,18 @@ function replacePolyline(
 
 function samePoint(start: Point, end: Point): boolean {
   return start.x === end.x && start.y === end.y
+}
+
+function sameSelection(
+  previousIds: readonly string[],
+  nextIds: readonly string[],
+): boolean {
+  if (previousIds.length !== nextIds.length) {
+    return false
+  }
+
+  const next = new Set(nextIds)
+  return previousIds.every((id) => next.has(id))
 }
 
 function tightBounds(points: readonly Point[]): Rectangle | undefined {

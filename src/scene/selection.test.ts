@@ -9,8 +9,10 @@ import {
   polylineAt,
   selectionBounds,
   touchedPolylineIds,
+  duplicateDeltaAfterSelection,
   duplicatePolylines,
   hiddenPolylineIds,
+  nextDuplicateDelta,
   sceneWithoutHiddenPolylines,
   translatePolylines,
 } from './selection'
@@ -345,6 +347,82 @@ describe('duplicatePolylines', () => {
     expect(
       duplicatePolylines(scene, { ids: [], newIds: [], delta: point(1, 1) }),
     ).toBe(scene)
+  })
+
+  it('steps a fresh copy 10 mm right and up, then repeats that step', () => {
+    const scene = [
+      {
+        ...stroke('source', [point(1, 2), point(3, 4)], true),
+        stroke: '#e03131',
+        widthMm: 0.5,
+      },
+    ]
+    const first = nextDuplicateDelta(undefined)
+    const once = duplicatePolylines(scene, {
+      ids: ['source'],
+      newIds: ['copy'],
+      delta: first,
+    })
+    const second = nextDuplicateDelta(first)
+    const twice = duplicatePolylines(once, {
+      ids: ['copy'],
+      newIds: ['copy-2'],
+      delta: second,
+    })
+
+    expect(once[1]).toEqual({
+      id: 'copy',
+      points: [point(11, 12), point(13, 14)],
+      closed: true,
+      stroke: '#e03131',
+      widthMm: 0.5,
+    })
+    expect(once[1]?.points).not.toBe(scene[0]?.points)
+    expect(twice[2]?.points).toEqual([point(21, 22), point(23, 24)])
+    expect(twice[0]).toBe(scene[0])
+    expect(twice[1]).toBe(once[1])
+    expect(second).toBe(first)
+  })
+
+  it('repeats an alt-drop delta from the copies', () => {
+    const scene = [stroke('source', [point(0, 0), point(2, 0)])]
+    const drop = point(25, 0)
+    const copied = duplicatePolylines(scene, {
+      ids: ['source'],
+      newIds: ['copy'],
+      delta: drop,
+    })
+    const again = duplicatePolylines(copied, {
+      ids: ['copy'],
+      newIds: ['copy-2'],
+      delta: nextDuplicateDelta(drop),
+    })
+
+    expect(copied[0]?.points).toEqual([point(0, 0), point(2, 0)])
+    expect(again[1]?.points).toEqual([point(25, 0), point(27, 0)])
+    expect(again[2]?.points).toEqual([point(50, 0), point(52, 0)])
+  })
+})
+
+describe('duplicateDeltaAfterSelection', () => {
+  const stored = point(12, 3)
+
+  it('keeps the delta when the same polylines stay selected', () => {
+    expect(duplicateDeltaAfterSelection(stored, ['a'], ['a'])).toBe(stored)
+    expect(duplicateDeltaAfterSelection(stored, ['a', 'b'], ['b', 'a'])).toBe(
+      stored,
+    )
+  })
+
+  it('forgets the delta when the selection changes', () => {
+    expect(duplicateDeltaAfterSelection(stored, ['a'], [])).toBeUndefined()
+    expect(duplicateDeltaAfterSelection(stored, ['a'], ['b'])).toBeUndefined()
+    expect(
+      duplicateDeltaAfterSelection(stored, ['a', 'b'], ['a']),
+    ).toBeUndefined()
+    expect(
+      duplicateDeltaAfterSelection(undefined, ['a'], ['b']),
+    ).toBeUndefined()
   })
 })
 

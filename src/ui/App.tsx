@@ -17,7 +17,9 @@ import type { Point, Polyline } from '../scene/polyline'
 import {
   deletePolylinePoint,
   deletePolylines,
+  duplicateDeltaAfterSelection,
   duplicatePolylines,
+  nextDuplicateDelta,
   insertPolylinePoint,
   movePolylinePoint,
   pointerTarget,
@@ -48,6 +50,7 @@ export function App() {
   const [tool, setTool] = useState<Tool>('polyline')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [duplicateDelta, setDuplicateDelta] = useState<Point>()
   const [pointEdit, setPointEdit] = useState<PointEdit>()
   const [gesture, setGesture] = useState<SelectGesture>()
   const [shiftHeld, setShiftHeld] = useHeldKey('Shift')
@@ -79,6 +82,7 @@ export function App() {
       clearDraft()
     } else {
       setSelectedIds([])
+      setDuplicateDelta(undefined)
       setPointEdit(undefined)
     }
     gestureRef.current = undefined
@@ -121,6 +125,7 @@ export function App() {
     setDraftPoints,
     setFollower,
     setSelectedIds,
+    setDuplicateDelta,
     setPointEdit,
     setGesture,
     setShiftHeld,
@@ -133,6 +138,7 @@ export function App() {
 
     setScene((current) => deletePolylines(current, selectedIds))
     setSelectedIds([])
+    setDuplicateDelta(undefined)
     setPointEdit(undefined)
     gestureRef.current = undefined
     setGesture(undefined)
@@ -144,7 +150,19 @@ export function App() {
     deleteSelection,
     setScene,
     setSelectedIds,
+    setDuplicateDelta,
     setPointEdit,
+  )
+  useCommandDuplicate(
+    tool,
+    selectedIds,
+    duplicateDelta,
+    gestureRef,
+    setScene,
+    setSelectedIds,
+    setDuplicateDelta,
+    setPointEdit,
+    setGesture,
   )
   useFinishOnEnter(finishDraft)
 
@@ -163,6 +181,7 @@ export function App() {
   const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
     setScene(polylines.map(polylineWithNewId))
     setSelectedIds([])
+    setDuplicateDelta(undefined)
     setPointEdit(undefined)
     clearDraft()
     gestureRef.current = undefined
@@ -348,6 +367,7 @@ function useSheetPointer(input: SheetPointerInput): void {
     setDraftPoints,
     setFollower,
     setSelectedIds,
+    setDuplicateDelta,
     setPointEdit,
     setGesture,
     setShiftHeld,
@@ -373,6 +393,7 @@ function useSheetPointer(input: SheetPointerInput): void {
       setDraftPoints,
       setFollower,
       setSelectedIds,
+      setDuplicateDelta,
       setPointEdit,
       setGesture,
       setShiftHeld,
@@ -417,6 +438,7 @@ function useSheetPointer(input: SheetPointerInput): void {
     setFollower,
     setGesture,
     setPointEdit,
+    setDuplicateDelta,
     setScene,
     setSelectedIds,
     setAltHeld,
@@ -502,7 +524,7 @@ function beginPointEdit(
     return
   }
 
-  input.setSelectedIds([target.id])
+  replaceSelection(input, [target.id])
   input.setPointEdit({ id: target.id, pointIndex: undefined })
 }
 
@@ -525,7 +547,7 @@ function insertEditedPoint(
   }
 
   input.setScene(inserted.scene)
-  input.setSelectedIds([editingId])
+  replaceSelection(input, [editingId])
   input.setPointEdit({ id: editingId, pointIndex: inserted.index })
   return true
 }
@@ -558,7 +580,7 @@ function moveSheetPointer(
     input.gestureRef.current = next.gesture
     input.setGesture(next.gesture)
     if (next.selectedIds !== input.selectedIds) {
-      input.setSelectedIds(next.selectedIds)
+      replaceSelection(input, next.selectedIds)
       input.setPointEdit(undefined)
     }
   }
@@ -614,7 +636,8 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     return
   }
   if (gesture.kind === 'marquee') {
-    input.setSelectedIds(
+    replaceSelection(
+      input,
       touchedPolylineIds(input.scene, {
         start: gesture.startScene,
         end: gesture.currentScene,
@@ -672,7 +695,18 @@ function commitDuplicate(
     }),
   )
   input.setSelectedIds(newIds)
+  input.setDuplicateDelta(delta)
   input.setPointEdit(undefined)
+}
+
+function replaceSelection(
+  input: SheetPointerInput,
+  nextIds: readonly string[],
+): void {
+  input.setDuplicateDelta((stored) =>
+    duplicateDeltaAfterSelection(stored, input.selectedIds, nextIds),
+  )
+  input.setSelectedIds(nextIds)
 }
 
 function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
@@ -680,19 +714,19 @@ function finishPress(gesture: PressGesture, input: SheetPointerInput): void {
     return
   }
   if (gesture.pointIndex !== undefined && gesture.hitId) {
-    input.setSelectedIds([gesture.hitId])
+    replaceSelection(input, [gesture.hitId])
     input.setPointEdit({ id: gesture.hitId, pointIndex: gesture.pointIndex })
     return
   }
   if (gesture.hitId) {
-    input.setSelectedIds([gesture.hitId])
+    replaceSelection(input, [gesture.hitId])
     if (gesture.hitId !== input.pointEdit?.id) {
       input.setPointEdit(undefined)
     }
     return
   }
 
-  input.setSelectedIds([])
+  replaceSelection(input, [])
   input.setPointEdit(undefined)
 }
 
@@ -719,7 +753,7 @@ function moveEditedPoint(
       }),
     })
   })
-  input.setSelectedIds([gesture.id])
+  replaceSelection(input, [gesture.id])
   input.setPointEdit({ id: gesture.id, pointIndex: gesture.index })
 }
 
@@ -1196,6 +1230,7 @@ function useSelectBackspace(
   deleteSelection: () => void,
   setScene: Dispatch<SetStateAction<Scene>>,
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
 ): void {
   useEffect(() => {
@@ -1214,6 +1249,7 @@ function useSelectBackspace(
           { id: pointEdit.id, index: pointEdit.pointIndex },
           setScene,
           setSelectedIds,
+          setDuplicateDelta,
           setPointEdit,
         )
         return
@@ -1228,11 +1264,79 @@ function useSelectBackspace(
     deleteSelection,
     pointEdit,
     scene,
+    setDuplicateDelta,
     setPointEdit,
     setScene,
     setSelectedIds,
     tool,
   ])
+}
+
+function useCommandDuplicate(
+  tool: Tool,
+  selectedIds: readonly string[],
+  duplicateDelta: Point | undefined,
+  gestureRef: RefObject<SelectGesture | undefined>,
+  setScene: Dispatch<SetStateAction<Scene>>,
+  setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
+  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
+  setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>,
+): void {
+  const latest = useRef({ selectedIds, duplicateDelta })
+  latest.current = { selectedIds, duplicateDelta }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isCommandDuplicate(event) || tool !== 'select') {
+        return
+      }
+
+      event.preventDefault()
+      const selection = latest.current
+      if (event.repeat || selection.selectedIds.length === 0) {
+        return
+      }
+
+      const delta = nextDuplicateDelta(selection.duplicateDelta)
+      const newIds = selection.selectedIds.map(() => crypto.randomUUID())
+      latest.current = { selectedIds: newIds, duplicateDelta: delta }
+      setScene((current) =>
+        duplicatePolylines(current, {
+          ids: selection.selectedIds,
+          newIds,
+          delta,
+        }),
+      )
+      setSelectedIds(newIds)
+      setDuplicateDelta(delta)
+      setPointEdit(undefined)
+      gestureRef.current = undefined
+      setGesture(undefined)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [
+    gestureRef,
+    latest,
+    setDuplicateDelta,
+    setGesture,
+    setPointEdit,
+    setScene,
+    setSelectedIds,
+    tool,
+  ])
+}
+
+function isCommandDuplicate(event: KeyboardEvent): boolean {
+  return (
+    event.key.toLowerCase() === 'd' &&
+    event.metaKey &&
+    !event.shiftKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  )
 }
 
 function isPlainBackspace(event: KeyboardEvent): boolean {
@@ -1249,6 +1353,7 @@ function deleteSelectedPoint(
   target: PointDelete,
   setScene: Dispatch<SetStateAction<Scene>>,
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
 ): void {
   const polyline = scene.find((item) => item.id === target.id)
@@ -1264,6 +1369,7 @@ function deleteSelectedPoint(
   }
 
   setSelectedIds([])
+  setDuplicateDelta(undefined)
   setPointEdit(undefined)
 }
 
@@ -1728,6 +1834,7 @@ type SheetPointerInput = {
   setDraftPoints: Dispatch<SetStateAction<readonly Point[]>>
   setFollower: Dispatch<SetStateAction<Point | undefined>>
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>
+  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>
   setShiftHeld: Dispatch<SetStateAction<boolean>>
