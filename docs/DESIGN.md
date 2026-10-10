@@ -25,7 +25,7 @@ The canvas fills the window. Controls are white islands with a soft shadow, not 
 - Top center: the tool island. One tool is active.
 - Top left: one menu button. Export and preferences live in that menu, not on the canvas.
 - A property island appears only for the active tool or selection, and only with the few settings that tool needs.
-- Bottom left: zoom. One percentage, minus, plus.
+- Top right: navigation. The zoom percentage, then a fit icon.
 - No Upgrade, Share, library, live collaboration, or sign-in.
 
 Island shadow, from Excalidraw:

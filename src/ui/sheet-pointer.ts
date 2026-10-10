@@ -18,13 +18,13 @@ import {
   scalePolylines,
 } from '../scene/scale'
 import type { ScaleHandle } from '../scene/scale'
-import { canvasPointToScene, fitSheet } from '../scene/sheet'
-import type { Scene, WindowSize } from '../scene/sheet'
+import { canvasPointToScene } from '../scene/sheet'
+import type { Scene, SheetFit } from '../scene/sheet'
 
 export function useSheetPointer(input: SheetPointerInput): void {
   const {
     canvasRef,
-    windowSize,
+    viewport,
     tool,
     scene,
     selectedIds,
@@ -50,7 +50,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
 
     const sheetPointer = {
       canvasRef,
-      windowSize,
+      viewport,
       tool,
       scene,
       selectedIds,
@@ -112,7 +112,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setAltHeld,
     setShiftHeld,
     tool,
-    windowSize,
+    viewport,
   ])
 }
 
@@ -127,7 +127,7 @@ function beginSheetPointer(
     return
   }
 
-  const located = locatePointer(canvas, event, input.windowSize)
+  const located = locatePointer(canvas, event, input.viewport)
   if (!located) {
     return
   }
@@ -176,7 +176,7 @@ function beginPointEdit(
     return
   }
 
-  const located = locatePointer(canvas, event, input.windowSize)
+  const located = locatePointer(canvas, event, input.viewport)
   if (!located) {
     return
   }
@@ -233,7 +233,7 @@ function moveSheetPointer(
     return
   }
 
-  const located = locatePointer(canvas, event, input.windowSize)
+  const located = locatePointer(canvas, event, input.viewport)
   const gesture = input.gestureRef.current
   if (!gesture || gesture.pointerId !== event.pointerId) {
     placeScaleCursor(canvas, located, input)
@@ -264,7 +264,7 @@ function followDraft(
     return
   }
 
-  const located = locatePointer(canvas, event, input.windowSize)
+  const located = locatePointer(canvas, event, input.viewport)
   if (!located) {
     return
   }
@@ -292,7 +292,7 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
   if (canvas) {
     placeScaleCursor(
       canvas,
-      locatePointer(canvas, event, input.windowSize),
+      locatePointer(canvas, event, input.viewport),
       input,
     )
   }
@@ -539,9 +539,8 @@ export function advanceGesture(
 function locatePointer(
   canvas: HTMLCanvasElement,
   event: { clientX: number; clientY: number },
-  windowSize: WindowSize,
+  fit: SheetFit,
 ): LocatedPointer | undefined {
-  const fit = fitSheet(windowSize)
   if (fit.scale <= 0) {
     return undefined
   }
@@ -600,7 +599,7 @@ function scaleHandleUnderPointer(
     return undefined
   }
 
-  const fit = fitSheet(input.windowSize)
+  const fit = input.viewport
   if (fit.scale <= 0) {
     return undefined
   }
@@ -714,7 +713,7 @@ export type PointEdit = {
 
 type SheetPointerInput = {
   canvasRef: RefObject<HTMLCanvasElement | null>
-  windowSize: WindowSize
+  viewport: SheetFit
   tool: Tool
   scene: Scene
   selectedIds: readonly string[]

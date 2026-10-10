@@ -2,6 +2,7 @@ import {
   RiCheckLine,
   RiCircleLine,
   RiDeleteBinLine,
+  RiFullscreenLine,
   RiMenuLine,
   RiRouteLine,
 } from '@remixicon/react'
@@ -136,6 +137,35 @@ function PolylineIcon() {
   )
 }
 
+export function NavigationIsland({
+  percent,
+  onResetZoom,
+  onFit,
+}: NavigationIslandProps) {
+  return (
+    <div className="navigation-anchor">
+      <div className="island navigation-island">
+        <button
+          type="button"
+          className="zoom-button"
+          aria-label="Reset zoom to 100%"
+          onClick={onResetZoom}
+        >
+          {percent}%
+        </button>
+        <button
+          type="button"
+          className="tool-button"
+          aria-label="Fit sheet"
+          onClick={onFit}
+        >
+          <RiFullscreenLine />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function FinishIsland({ enabled, onFinish }: FinishIslandProps) {
   return (
     <div className="island property-island">
@@ -234,6 +264,12 @@ type ToolButtonProps = {
   pressed: boolean
   onPress: () => void
   children: ReactNode
+}
+
+type NavigationIslandProps = {
+  percent: number
+  onResetZoom: () => void
+  onFit: () => void
 }
 
 type FinishIslandProps = {

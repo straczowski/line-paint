@@ -28,10 +28,8 @@ body {
 
 .sheet-hint {
   position: absolute;
-  inset: 0;
   margin: 0;
-  display: grid;
-  place-items: center;
+  transform: translate(-50%, -50%);
   pointer-events: none;
   color: #999999;
   font-size: 0.875rem;
@@ -67,9 +65,16 @@ body {
   gap: 0.5rem;
 }
 
+.navigation-anchor {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
 .tool-island,
 .property-island,
-.menu-island {
+.menu-island,
+.navigation-island {
   display: flex;
   gap: 0.25rem;
   padding: 0.25rem;
@@ -126,6 +131,22 @@ body {
 }
 
 .tool-button:hover:not([aria-pressed='true']) {
+  background: #f1f0ff;
+}
+
+.zoom-button {
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #1b1b1f;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.zoom-button:hover {
   background: #f1f0ff;
 }
 

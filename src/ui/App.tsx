@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
 import { gcodeDocument, svgDocument } from '../scene/export'
 import type { ImportedPolyline } from '../scene/import'
@@ -9,8 +9,16 @@ import {
   deletePolylines,
   sceneWithoutHiddenPolylines,
 } from '../scene/selection'
-import { emptyScene, fitSheet } from '../scene/sheet'
-import type { Scene, WindowSize } from '../scene/sheet'
+import {
+  emptyScene,
+  fitSheet,
+  panBy,
+  pinchAt,
+  resetZoom,
+  sheetCenterOnCanvas,
+  zoomPercent,
+} from '../scene/sheet'
+import type { Scene, SheetFit, WindowSize } from '../scene/sheet'
 import {
   useCommandDuplicate,
   useFinishOnEnter,
@@ -28,6 +36,7 @@ import {
   FinishIsland,
   ImportToast,
   MenuIsland,
+  NavigationIsland,
   SelectIsland,
   ToolIsland,
 } from './islands'
@@ -53,6 +62,8 @@ export function App() {
   const [shiftHeld, setShiftHeld] = useHeldKey('Shift')
   const [altHeld, setAltHeld] = useHeldKey('Alt')
   const windowSize = useWindowSize()
+  const [viewport, setViewport] = useState(() => fitSheet(readWindowSize()))
+  const hostRef = useRef<HTMLElement>(null)
   const staticCanvasRef = useRef<HTMLCanvasElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const svgInputRef = useRef<HTMLInputElement>(null)
@@ -93,6 +104,7 @@ export function App() {
     staticCanvasRef,
     scene,
     windowSize,
+    viewport,
     hiddenPolylineKey(selectedIds, gesture, altHeld),
   )
   useOverlayPicture(
@@ -108,10 +120,12 @@ export function App() {
       altHeld,
     ),
     windowSize,
+    viewport,
   )
+  useSheetWheel(hostRef, windowSize, setViewport)
   useSheetPointer({
     canvasRef: overlayCanvasRef,
-    windowSize,
+    viewport,
     tool,
     scene,
     selectedIds,
@@ -165,6 +179,7 @@ export function App() {
 
   const showHint =
     tool === 'polyline' && scene.length === 0 && draftPoints.length === 0
+  const hintCenter = sheetCenterOnCanvas(viewport)
   const selectedPolyline = lonePolyline(scene, selectedIds)
   const closeSelected = (closed: boolean) => {
     if (!selectedPolyline) {
@@ -195,11 +210,16 @@ export function App() {
   useSvgDrop(applyImportedSvg, importToast.show)
 
   return (
-    <main className="sheet-host">
+    <main ref={hostRef} className="sheet-host">
       <canvas ref={staticCanvasRef} className="sheet-canvas" />
       <canvas ref={overlayCanvasRef} className="sheet-canvas" />
       {showHint && (
-        <p className="sheet-hint">Click to add a point. Enter to finish.</p>
+        <p
+          className="sheet-hint"
+          style={{ left: hintCenter.x, top: hintCenter.y }}
+        >
+          Click to add a point. Enter to finish.
+        </p>
       )}
       <input
         ref={svgInputRef}
@@ -251,6 +271,11 @@ export function App() {
           />
         )}
       </div>
+      <NavigationIsland
+        percent={zoomPercent(viewport.scale, fitSheet(windowSize).scale)}
+        onResetZoom={() => setViewport((fit) => resetZoom(fit, windowSize))}
+        onFit={() => setViewport(fitSheet(windowSize))}
+      />
     </main>
   )
 }
@@ -280,6 +305,7 @@ function useFinishedPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   scene: Scene,
   windowSize: WindowSize,
+  viewport: SheetFit,
   hiddenKey: string,
 ): void {
   useLayoutEffect(() => {
@@ -290,16 +316,17 @@ function useFinishedPicture(
     paintStaticCanvas({
       context: requireContext(canvasRef.current, 'Static'),
       scene: sceneWithoutHiddenPolylines(scene, idsInHiddenKey(hiddenKey)),
-      fit: fitSheet(windowSize),
+      fit: viewport,
       size: windowSize,
     })
-  }, [canvasRef, hiddenKey, scene, windowSize])
+  }, [canvasRef, hiddenKey, scene, viewport, windowSize])
 }
 
 function useOverlayPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   frame: OverlayFrame,
   windowSize: WindowSize,
+  viewport: SheetFit,
 ): void {
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
@@ -314,10 +341,48 @@ function useOverlayPicture(
       scaleHandles: frame.scaleHandles,
       marquee: frame.marquee,
       handles: frame.handles,
-      fit: fitSheet(windowSize),
+      fit: viewport,
       size: windowSize,
     })
-  }, [canvasRef, frame, windowSize])
+  }, [canvasRef, frame, viewport, windowSize])
+}
+
+function useSheetWheel(
+  hostRef: RefObject<HTMLElement | null>,
+  windowSize: WindowSize,
+  setViewport: Dispatch<SetStateAction<SheetFit>>,
+): void {
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) {
+      return
+    }
+
+    const fitScale = fitSheet(windowSize).scale
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const anchor = pointerOnHost(event, host)
+      setViewport((fit) =>
+        event.ctrlKey
+          ? pinchAt(fit, anchor, event.deltaY, fitScale)
+          : panBy(fit, event.deltaX, event.deltaY),
+      )
+    }
+
+    host.addEventListener('wheel', onWheel, { passive: false })
+    return () => host.removeEventListener('wheel', onWheel)
+  }, [hostRef, setViewport, windowSize])
+}
+
+function pointerOnHost(
+  event: { clientX: number; clientY: number },
+  host: HTMLElement,
+): Point {
+  const bounds = host.getBoundingClientRect()
+  return {
+    x: event.clientX - bounds.left,
+    y: event.clientY - bounds.top,
+  }
 }
 
 function lonePolyline(
