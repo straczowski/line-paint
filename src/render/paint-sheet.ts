@@ -12,7 +12,7 @@ export function paintStaticCanvas(input: PaintStaticCanvasInput): void {
   const { context, scene, fit, size } = input
   matchCanvasSize(context, size)
   clearCanvas(context, size)
-  strokeSheetBorder(context, fit)
+  paintSheet(context, fit)
   for (const polyline of scene) {
     paintStroke(context, {
       points: pointsWithClosingSegment(polyline.points, polyline.closed),
@@ -69,7 +69,7 @@ function matchCanvasSize(context: SheetContext, size: WindowSize): void {
 }
 
 function clearCanvas(context: SheetContext, size: WindowSize): void {
-  context.fillStyle = canvasWhite
+  context.fillStyle = outsideSheet
   context.fillRect(0, 0, size.width, size.height)
 }
 
@@ -77,9 +77,16 @@ function clearOverlay(context: SheetContext, size: WindowSize): void {
   context.clearRect(0, 0, size.width, size.height)
 }
 
-function strokeSheetBorder(context: SheetContext, fit: SheetFit): void {
+function paintSheet(context: SheetContext, fit: SheetFit): void {
   const topLeft = scenePointToCanvas({ x: 0, y: sheetHeightMm }, fit)
   const bottomRight = scenePointToCanvas({ x: sheetWidthMm, y: 0 }, fit)
+  context.fillStyle = canvasWhite
+  context.fillRect(
+    topLeft.x,
+    topLeft.y,
+    bottomRight.x - topLeft.x,
+    bottomRight.y - topLeft.y,
+  )
   const left = alignHairline(topLeft.x)
   const top = alignHairline(topLeft.y)
   const right = alignHairline(bottomRight.x)
@@ -293,6 +300,7 @@ type SheetContext = {
   stroke(): void
 }
 
+const outsideSheet = '#f1f3f5'
 const canvasWhite = '#ffffff'
 const sheetHairline = '#c5c5d0'
 const selectionColor = '#6965db'

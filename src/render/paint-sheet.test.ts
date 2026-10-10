@@ -8,6 +8,23 @@ import {
   pointsWithClosingSegment,
 } from './paint-sheet'
 
+describe('sheet paint', () => {
+  it('fills the window grey and the sheet white', () => {
+    const page = new RecordingPen()
+    paintStaticCanvas({
+      context: page,
+      scene: [],
+      fit: { scale: 2, left: 8, top: 4 },
+      size,
+    })
+
+    expect(page.fills).toEqual([
+      { color: '#f1f3f5', x: 0, y: 0, width: 400, height: 300 },
+      { color: '#ffffff', x: 8, y: 4, width: 594, height: 420 },
+    ])
+  })
+})
+
 describe('pointsWithClosingSegment', () => {
   it('adds the return to the first point when closed', () => {
     const points = [point(0, 0), point(10, 0), point(10, 10)]
@@ -109,9 +126,14 @@ class RecordingPen {
   lineJoin: CanvasLineJoin = 'miter'
   readonly strokes: string[] = []
   readonly lines: Point[][] = []
+  readonly fills: Fill[] = []
   private current: Point[] = []
 
-  fillRect(): void {}
+  fillRect(x: number, y: number, width: number, height: number): void {
+    if (typeof this.fillStyle === 'string') {
+      this.fills.push({ color: this.fillStyle, x, y, width, height })
+    }
+  }
   clearRect(): void {}
   strokeRect(): void {}
   beginPath(): void {}
@@ -152,4 +174,12 @@ function stroke(
 
 function point(x: number, y: number): Point {
   return { x, y }
+}
+
+type Fill = {
+  color: string
+  x: number
+  y: number
+  width: number
+  height: number
 }

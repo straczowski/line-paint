@@ -1,6 +1,6 @@
 # Design
 
-Line Paint looks like [Excalidraw](https://excalidraw.com/): a white canvas, floating controls, and a violet accent. The drawing itself is cleaner than Excalidraw. Strokes stay plain, because a pen plotter draws lines.
+Line Paint looks like [Excalidraw](https://excalidraw.com/): a white sheet on a light grey window, floating controls, and a violet accent. The drawing itself is cleaner than Excalidraw. Strokes stay plain, because a pen plotter draws lines.
 
 Colors below are Excalidraw’s light theme, from `packages/excalidraw/css/theme.scss` and `packages/common/src/colors.ts` on `master`.
 
@@ -20,7 +20,7 @@ Excalidraw’s property sidebar is the ceiling, not the target. Do not add slopp
 
 Light theme only.
 
-The canvas fills the window. Controls are white islands with a soft shadow, not a docked sidebar.
+The window outside the sheet is light grey. The sheet is the white page. Controls are white islands with a soft shadow, not a docked sidebar.
 
 - Top center: the tool island. One tool is active.
 - Top left: one menu button. Export and preferences live in that menu, not on the canvas.
@@ -45,7 +45,8 @@ UI:
 
 | Role | Hex | Excalidraw token |
 | --- | --- | --- |
-| Canvas, island | `#ffffff` | `--island-bg-color` |
+| Outside the sheet | `#f1f3f5` | Open Color gray 1 |
+| Sheet, island | `#ffffff` | `--island-bg-color` |
 | Text | `#1b1b1f` | `--color-on-surface` |
 | Muted text, hints | `#999999` | `--color-gray-50` |
 | Primary, selected accent | `#6965db` | `--color-primary` |
