@@ -141,7 +141,63 @@ describe('gcodeDocument', () => {
     expect(document).not.toContain('Y210.01')
     expect(document.match(/G0 X\d+/g)).toEqual(['G0 X10', 'G0 X0'])
   })
+
+  it('draws the nearer polyline first and starts the next one at its nearer end', () => {
+    const far = [point(80, 80), point(25, 25)]
+    const near = [point(10, 10), point(20, 20)]
+    const scene = [
+      line({ id: 'far', points: far }),
+      line({ id: 'near', points: near }),
+    ]
+
+    expect(gcodeMoves(gcodeDocument(scene))).toEqual([
+      'G0 X10 Y10',
+      'G1 X20 Y20',
+      'G0 X25 Y25',
+      'G1 X80 Y80',
+      'G0 X0 Y0',
+    ])
+    expect(scene[0]?.points).toBe(far)
+    expect(scene[1]?.points).toBe(near)
+    expect(svgDocument(scene).indexOf('M 80,130')).toBeLessThan(
+      svgDocument(scene).indexOf('M 10,200'),
+    )
+  })
+
+  it('starts a closed polyline at the stored end nearer the origin and repeats that point', () => {
+    const points = [point(100, 100), point(30, 40)]
+    const scene = [line({ points, closed: true })]
+
+    expect(gcodeMoves(gcodeDocument(scene))).toEqual([
+      'G0 X30 Y40',
+      'G1 X100 Y100',
+      'G1 X30 Y40',
+      'G0 X0 Y0',
+    ])
+    expect(scene[0]?.points).toBe(points)
+  })
+
+  it('continues from the repeated start of a closed polyline', () => {
+    const document = gcodeDocument([
+      line({ points: [point(40, 0), point(50, 0)], closed: true }),
+      line({ points: [point(51, 0), point(52, 0)] }),
+      line({ points: [point(41, 0), point(42, 0)] }),
+    ])
+
+    expect(document.match(/G0 X\d+ Y\d+/g)).toEqual([
+      'G0 X40 Y0',
+      'G0 X41 Y0',
+      'G0 X51 Y0',
+      'G0 X0 Y0',
+    ])
+  })
 })
+
+function gcodeMoves(document: string): string[] {
+  return document
+    .split('\n')
+    .filter((line) => line.startsWith('G0 X') || line.startsWith('G1 X'))
+}
 
 function line(fields: Partial<Polyline> & Pick<Polyline, 'points'>): Polyline {
   return {

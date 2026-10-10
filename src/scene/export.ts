@@ -8,8 +8,12 @@ export function svgDocument(scene: Scene): string {
 }
 
 export function gcodeDocument(scene: Scene): string {
-  const moves = polylinesForExport(scene).flatMap(gcodeMoves)
+  const moves = polylinesForGcode(scene).flatMap(gcodeMoves)
   return [...gcodePreamble(), ...moves, returnToOrigin].join('\n')
+}
+
+function polylinesForGcode(scene: Scene): readonly ExportPolyline[] {
+  return orderForTravel(scene.filter(isOnSheet)).map(withClosingPoint)
 }
 
 export function polylinesForExport(scene: Scene): readonly ExportPolyline[] {
@@ -50,6 +54,76 @@ const returnToOrigin = 'G0 X0 Y0'
 
 function gcodePreamble(): readonly string[] {
   return [penUp, pause, penDown, pause, penUp, pause, feed]
+}
+
+const travelOrigin: Point = { x: 0, y: 0 }
+
+function orderForTravel(polylines: readonly Polyline[]): readonly Polyline[] {
+  const pending = [...polylines]
+  const ordered: Polyline[] = []
+  let pen = travelOrigin
+
+  while (pending.length > 0) {
+    const choice = nearestToPen(pending, pen)
+    const taken = pending.splice(choice.index, 1)[0]
+    const oriented = choice.reversed ? reversePolyline(taken) : taken
+    ordered.push(oriented)
+    const written = writtenPoints(oriented)
+    const end = written[written.length - 1]
+    if (end) {
+      pen = end
+    }
+  }
+
+  return ordered
+}
+
+function nearestToPen(
+  pending: readonly Polyline[],
+  pen: Point,
+): { index: number; reversed: boolean } {
+  let index = 0
+  let distance = Infinity
+  let reversed = false
+
+  for (let candidate = 0; candidate < pending.length; candidate++) {
+    const ends = nearerEnd(pending[candidate], pen)
+    if (ends.distance < distance) {
+      distance = ends.distance
+      index = candidate
+      reversed = ends.reversed
+    }
+  }
+
+  return { index, reversed }
+}
+
+function nearerEnd(
+  polyline: Polyline | undefined,
+  pen: Point,
+): { distance: number; reversed: boolean } {
+  const start = polyline?.points[0]
+  const end = polyline?.points[polyline.points.length - 1]
+  if (!start || !end) {
+    return { distance: Infinity, reversed: false }
+  }
+
+  const distanceToStart = travel(pen, start)
+  const distanceToEnd = travel(pen, end)
+  return {
+    distance: Math.min(distanceToStart, distanceToEnd),
+    reversed: distanceToEnd < distanceToStart,
+  }
+}
+
+function reversePolyline(polyline: Polyline): Polyline {
+  return { ...polyline, points: [...polyline.points].reverse() }
+}
+
+function travel(from: Point, to: Point): number {
+  const dx = from.x - to.x
+  const dy = from.y - to.y
+  return Math.hypot(dx, dy)
 }
 
 function gcodeMoves(polyline: ExportPolyline): readonly string[] {
