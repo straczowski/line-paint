@@ -29,7 +29,7 @@ SVG and GCode are export formats. They are not the live editor. An SVG DOM gets 
 
 The scene is an ordered list of elements in document coordinates, as in [CONCEPT.md](CONCEPT.md): millimeters, origin at the bottom-left, Y up. A stroke is a sequence of points plus the stroke color and width from [DESIGN.md](DESIGN.md). Pan and zoom belong to the viewport. They change how the canvas is painted. They do not change the points that will be exported.
 
-The canvas origin is the top-left and its Y grows down. `src/render/` is the only place that flips Y. Landscape GCode copies the scene numbers. Portrait GCode rotates them 90° onto the landscape bed. That rotation lives with export, not in the scene.
+The canvas origin is the top-left and its Y grows down. Scene coordinates stay bottom-left, Y up. `sceneYToTop` in `src/scene/sheet.ts` converts scene Y onto that top-down axis. `src/render/paint-sheet.ts` and SVG export call it. Landscape GCode copies the scene numbers. Portrait stays on the Later list in [CONCEPT.md](CONCEPT.md).
 
 React and the canvases both read this scene. They do not keep a second copy of the geometry. Pointer events land on the overlay canvas. React does not receive the drag that creates a point.
 
@@ -55,7 +55,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Pixels | `src/render/paint-sheet.ts` |
 | Scene state and canvas hooks | `src/ui/App.tsx` |
 | Pointer gestures | `src/ui/sheet-pointer.ts` |
-| Overlay frame for the stroke being drawn | `src/ui/overlay-frame.ts` |
+| Draft stroke, selection preview, marquee, and handles | `src/ui/overlay-frame.ts` |
 | Keyboard commands | `src/ui/commands.ts` |
 | Toolbar and menu | `src/ui/islands.tsx` |
 | Import, export, and SVG drop | `src/ui/files.ts` |
