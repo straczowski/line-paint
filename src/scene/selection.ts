@@ -3,10 +3,11 @@ import type { Point, Polyline } from './polyline'
 export function polylineAt(
   scene: readonly Polyline[],
   point: Point,
+  zoom: number,
 ): string | undefined {
   for (let index = scene.length - 1; index >= 0; index -= 1) {
     const polyline = scene[index]
-    if (polyline && pointHitsPolyline(point, polyline)) {
+    if (polyline && pointHitsPolyline(point, polyline, zoom)) {
       return polyline.id
     }
   }
@@ -25,13 +26,14 @@ export function touchedPolylineIds(
 
 export function selectionBounds(
   points: readonly Point[],
+  zoom: number,
 ): SelectionBounds | undefined {
   const bounds = tightBounds(points)
   if (!bounds) {
     return undefined
   }
 
-  return outsetBounds(bounds, selectionOutsetMm)
+  return outsetBounds(bounds, selectionOutsetAt(zoom))
 }
 
 export function translatePolylines(
@@ -122,6 +124,7 @@ export function pointerTarget(
   scene: readonly Polyline[],
   point: Point,
   editingId: string | undefined,
+  zoom: number,
 ): PointerTarget {
   const editing = editingId
     ? scene.find((polyline) => polyline.id === editingId)
@@ -133,7 +136,7 @@ export function pointerTarget(
     }
   }
 
-  return { id: polylineAt(scene, point), pointIndex: undefined }
+  return { id: polylineAt(scene, point, zoom), pointIndex: undefined }
 }
 
 export function movePolylinePoint(
@@ -280,9 +283,18 @@ function outsetBounds(bounds: Rectangle, outsetMm: number): Rectangle {
 
 export const selectionOutsetMm = 2
 
-function pointHitsPolyline(point: Point, polyline: Polyline): boolean {
+export function selectionOutsetAt(zoom: number): number {
+  return distanceAtZoom(selectionOutsetMm, zoom)
+}
+
+function pointHitsPolyline(
+  point: Point,
+  polyline: Polyline,
+  zoom: number,
+): boolean {
+  const slop = hitSlopAt(zoom)
   return segmentsOf(polyline).some(
-    (segment) => distanceToSegment(point, segment) <= hitSlopMm,
+    (segment) => distanceToSegment(point, segment) <= slop,
   )
 }
 
@@ -512,6 +524,17 @@ function movePolyline(polyline: Polyline, delta: Point): Polyline {
 }
 
 const hitSlopMm = 3
+
+function hitSlopAt(zoom: number): number {
+  return distanceAtZoom(hitSlopMm, zoom)
+}
+
+function distanceAtZoom(millimeters: number, zoom: number): number {
+  if (!(zoom > 0)) {
+    return millimeters
+  }
+  return millimeters / zoom
+}
 
 export type CornerRectangle = {
   start: Point

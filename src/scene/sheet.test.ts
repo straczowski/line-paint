@@ -10,6 +10,7 @@ import {
   sheetCenterOnCanvas,
   sheetHeightMm,
   sheetWidthMm,
+  viewZoom,
   zoomPercent,
 } from './sheet'
 
@@ -139,6 +140,14 @@ describe('sheet', () => {
     expect(zoomPercent(fitScale * 2, fitScale)).toBe(200)
     expect(zoomPercent(fitScale * 0.156, fitScale)).toBe(16)
     expect(zoomPercent(1, 0)).toBe(0)
+  })
+
+  it('reports zoom against the fitted scale and treats a dead scale as fitted', () => {
+    expect(viewZoom(4, 2)).toBe(2)
+    expect(viewZoom(1, 2)).toBe(0.5)
+    expect(viewZoom(0, 2)).toBe(1)
+    expect(viewZoom(2, 0)).toBe(1)
+    expect(viewZoom(-1, 2)).toBe(1)
   })
 
   it('puts the hint at the center of the sheet', () => {

@@ -25,6 +25,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
   const {
     canvasRef,
     viewport,
+    zoom,
     tool,
     scene,
     selectedIds,
@@ -51,6 +52,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     const sheetPointer = {
       canvasRef,
       viewport,
+      zoom,
       tool,
       scene,
       selectedIds,
@@ -113,6 +115,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setShiftHeld,
     tool,
     viewport,
+    zoom,
   ])
 }
 
@@ -152,7 +155,7 @@ function beginSheetPointer(
   const scaleHandle = scaleHandleUnderPointer(input, located.scene)
   const target = scaleHandle
     ? { id: undefined, pointIndex: undefined }
-    : pointerTarget(input.scene, located.scene, input.pointEdit?.id)
+    : pointerTarget(input.scene, located.scene, input.pointEdit?.id, input.zoom)
   const press: SelectGesture = {
     kind: 'press',
     pointerId: event.pointerId,
@@ -181,7 +184,12 @@ function beginPointEdit(
     return
   }
 
-  const target = pointerTarget(input.scene, located.scene, undefined)
+  const target = pointerTarget(
+    input.scene,
+    located.scene,
+    undefined,
+    input.zoom,
+  )
   if (!target.id) {
     return
   }
@@ -322,7 +330,7 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     input.setScene((current) =>
       scalePolylines(
         current,
-        scaleInput(gesture, event.shiftKey, event.altKey),
+        scaleInput(gesture, event.shiftKey, event.altKey, input.zoom),
       ),
     )
     return
@@ -575,6 +583,7 @@ function scaleInput(
   gesture: ScaleGesture,
   shiftHeld: boolean,
   altHeld: boolean,
+  zoom: number,
 ) {
   return {
     ids: gesture.ids,
@@ -582,6 +591,7 @@ function scaleInput(
     pointer: gesture.currentScene,
     shiftHeld,
     altHeld,
+    zoom,
   }
 }
 
@@ -604,7 +614,10 @@ function scaleHandleUnderPointer(
     return undefined
   }
 
-  const bounds = selectionBounds(pointsIn(input.scene, input.selectedIds))
+  const bounds = selectionBounds(
+    pointsIn(input.scene, input.selectedIds),
+    input.zoom,
+  )
   if (!bounds) {
     return undefined
   }
@@ -714,6 +727,7 @@ export type PointEdit = {
 type SheetPointerInput = {
   canvasRef: RefObject<HTMLCanvasElement | null>
   viewport: SheetFit
+  zoom: number
   tool: Tool
   scene: Scene
   selectedIds: readonly string[]

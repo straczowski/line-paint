@@ -16,6 +16,7 @@ import {
   pinchAt,
   resetZoom,
   sheetCenterOnCanvas,
+  viewZoom,
   zoomPercent,
 } from '../scene/sheet'
 import type { Scene, SheetFit, WindowSize } from '../scene/sheet'
@@ -63,6 +64,7 @@ export function App() {
   const [altHeld, setAltHeld] = useHeldKey('Alt')
   const windowSize = useWindowSize()
   const [viewport, setViewport] = useState(() => fitSheet(readWindowSize()))
+  const zoom = viewZoom(viewport.scale, fitSheet(windowSize).scale)
   const hostRef = useRef<HTMLElement>(null)
   const staticCanvasRef = useRef<HTMLCanvasElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -118,6 +120,7 @@ export function App() {
       pointEdit,
       shiftHeld,
       altHeld,
+      zoom,
     ),
     windowSize,
     viewport,
@@ -126,6 +129,7 @@ export function App() {
   useSheetPointer({
     canvasRef: overlayCanvasRef,
     viewport,
+    zoom,
     tool,
     scene,
     selectedIds,

@@ -80,6 +80,14 @@ export function zoomPercent(scale: number, fitScale: number): number {
   return Math.round((scale / fitScale) * 100)
 }
 
+export function viewZoom(scale: number, fitScale: number): number {
+  if (!(scale > 0) || !(fitScale > 0)) {
+    return 1
+  }
+
+  return scale / fitScale
+}
+
 export function sheetCenterOnCanvas(fit: SheetFit): Point {
   return {
     x: fit.left + (sheetWidthMm / 2) * fit.scale,

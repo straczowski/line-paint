@@ -21,6 +21,7 @@ export function overlayFrame(
   pointEdit: PointEdit | undefined,
   shiftHeld: boolean,
   altHeld: boolean,
+  zoom: number,
 ): OverlayFrame {
   const bounds = selectionFrameBounds(
     scene,
@@ -28,13 +29,21 @@ export function overlayFrame(
     gesture,
     shiftHeld,
     altHeld,
+    zoom,
   )
   return {
     draftPoints: previewStrokePoints(
       draftPoints,
       followerEnd(draftPoints, follower, shiftHeld),
     ),
-    preview: overlayPreview(scene, selectedIds, gesture, shiftHeld, altHeld),
+    preview: overlayPreview(
+      scene,
+      selectedIds,
+      gesture,
+      shiftHeld,
+      altHeld,
+      zoom,
+    ),
     bounds,
     marquee:
       gesture?.kind === 'marquee'
@@ -99,12 +108,13 @@ function overlayPreview(
   gesture: SelectGesture | undefined,
   shiftHeld: boolean,
   altHeld: boolean,
+  zoom: number,
 ): OverlayFrame['preview'] {
   if (gesture?.kind === 'point') {
     return pointDragPreview(scene, gesture, shiftHeld)
   }
   if (gesture?.kind === 'scale') {
-    return scalePreview(scene, gesture, shiftHeld, altHeld)
+    return scalePreview(scene, gesture, shiftHeld, altHeld, zoom)
   }
   return selectionPreview(scene, selectedIds, gesture, shiftHeld)
 }
@@ -157,13 +167,15 @@ function selectionFrameBounds(
   gesture: SelectGesture | undefined,
   shiftHeld: boolean,
   altHeld: boolean,
+  zoom: number,
 ): SelectionBounds | undefined {
   if (gesture?.kind === 'scale') {
     return selectionBounds(
       pointsIn(
-        scalePolylines(scene, scaleInput(gesture, shiftHeld, altHeld)),
+        scalePolylines(scene, scaleInput(gesture, shiftHeld, altHeld, zoom)),
         gesture.ids,
       ),
+      zoom,
     )
   }
 
@@ -179,7 +191,7 @@ function selectionFrameBounds(
       ? translatedPoints(polyline.points, selection.delta)
       : polyline.points
   })
-  return selectionBounds(points)
+  return selectionBounds(points, zoom)
 }
 
 function scalePreview(
@@ -187,8 +199,12 @@ function scalePreview(
   gesture: ScaleGesture,
   shiftHeld: boolean,
   altHeld: boolean,
+  zoom: number,
 ): OverlayFrame['preview'] {
-  const scaled = scalePolylines(scene, scaleInput(gesture, shiftHeld, altHeld))
+  const scaled = scalePolylines(
+    scene,
+    scaleInput(gesture, shiftHeld, altHeld, zoom),
+  )
   return scaled.flatMap((polyline) => {
     if (!gesture.ids.includes(polyline.id)) {
       return []
@@ -207,6 +223,7 @@ function scaleInput(
   gesture: ScaleGesture,
   shiftHeld: boolean,
   altHeld: boolean,
+  zoom: number,
 ) {
   return {
     ids: gesture.ids,
@@ -214,6 +231,7 @@ function scaleInput(
     pointer: gesture.currentScene,
     shiftHeld,
     altHeld,
+    zoom,
   }
 }
 

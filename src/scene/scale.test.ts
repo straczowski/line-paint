@@ -15,6 +15,7 @@ describe('scalePolylines', () => {
       pointer: point(42, 32),
       shiftHeld: false,
       altHeld: false,
+      zoom: 1,
     })
 
     expect(next[0]?.points).toEqual([point(10, 10), point(40, 30)])
@@ -25,6 +26,19 @@ describe('scalePolylines', () => {
     expect(scene[0]?.points).toEqual([point(10, 10), point(30, 20)])
   })
 
+  it('leaves the zoomed outset out of the points', () => {
+    const next = scalePolylines(scene, {
+      ids: ['box'],
+      handle: 'northEast',
+      pointer: point(41, 31),
+      shiftHeld: false,
+      altHeld: false,
+      zoom: 2,
+    })
+
+    expect(next[0]?.points).toEqual([point(10, 10), point(40, 30)])
+  })
+
   it('uses one factor for both axes when shift is held on a corner', () => {
     const next = scalePolylines(scene, {
       ids: ['box'],
@@ -32,6 +46,7 @@ describe('scalePolylines', () => {
       pointer: point(42, 32),
       shiftHeld: true,
       altHeld: false,
+      zoom: 1,
     })
 
     expect(next[0]?.points[0]).toEqual(point(10, 10))
@@ -46,6 +61,7 @@ describe('scalePolylines', () => {
       pointer: point(42, 80),
       shiftHeld: true,
       altHeld: false,
+      zoom: 1,
     }
 
     expect(scalePolylines(scene, input)[0]?.points).toEqual([
@@ -68,6 +84,7 @@ describe('scalePolylines', () => {
       pointer: point(42, 15),
       shiftHeld: false,
       altHeld: true,
+      zoom: 1,
     })
 
     expect(next[0]?.points).toEqual([point(0, 10), point(40, 20)])
@@ -80,6 +97,7 @@ describe('scalePolylines', () => {
       pointer: point(42, 32),
       shiftHeld: true,
       altHeld: true,
+      zoom: 1,
     })
 
     expect(next[0]?.points[0]?.x).toBeCloseTo(-2)
@@ -95,6 +113,7 @@ describe('scalePolylines', () => {
       pointer: point(0, 15),
       shiftHeld: false,
       altHeld: false,
+      zoom: 1,
     })
 
     expect(next[0]?.points[0]).toEqual(point(10, 10))
@@ -109,6 +128,7 @@ describe('scalePolylines', () => {
       pointer: point(0, 0),
       shiftHeld: true,
       altHeld: false,
+      zoom: 1,
     })
 
     expect(next[0]?.points[0]).toEqual(point(10, 10))
@@ -123,6 +143,7 @@ describe('scalePolylines', () => {
       pointer: point(-2, 15),
       shiftHeld: false,
       altHeld: false,
+      zoom: 1,
     })
 
     expect(next[0]?.points).toEqual([point(0, 10), point(30, 20)])
@@ -140,6 +161,7 @@ describe('scalePolylines', () => {
       pointer: point(62, 10),
       shiftHeld: false,
       altHeld: false,
+      zoom: 1,
     })
 
     expect(next[0]?.points).toEqual([point(0, 0), point(20, 0)])
@@ -157,6 +179,7 @@ describe('scalePolylines', () => {
         pointer: point(20, 30),
         shiftHeld: false,
         altHeld: false,
+        zoom: 1,
       }),
     ).toBe(flat)
   })
@@ -169,6 +192,7 @@ describe('scalePolylines', () => {
         pointer: point(32, 15),
         shiftHeld: false,
         altHeld: false,
+        zoom: 1,
       }),
     ).toBe(scene)
   })
@@ -181,6 +205,7 @@ describe('scalePolylines', () => {
         pointer: point(80, 15),
         shiftHeld: false,
         altHeld: false,
+        zoom: 1,
       }),
     ).toBe(scene)
   })

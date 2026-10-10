@@ -16,6 +16,7 @@ describe('overlayFrame', () => {
       undefined,
       false,
       false,
+      1,
     )
 
     expect(frame.draftPoints).toEqual([point(1, 2), point(8, 9)])
@@ -40,6 +41,7 @@ describe('overlayFrame', () => {
       { id: 'line', pointIndex: 0 },
       false,
       false,
+      1,
     )
 
     expect(frame.preview).toEqual([
@@ -73,6 +75,7 @@ describe('overlayFrame', () => {
       undefined,
       false,
       false,
+      1,
     )
 
     expect(frame.marquee).toEqual({
@@ -136,6 +139,7 @@ describe('selection accent', () => {
       undefined,
       false,
       false,
+      1,
     )
 
     expect(frame.preview).toEqual([
@@ -164,6 +168,7 @@ describe('selection accent', () => {
       undefined,
       false,
       false,
+      1,
     )
 
     expect(frame.draftPoints).toEqual([point(1, 2), point(4, 5)])
@@ -193,6 +198,7 @@ describe('selection accent', () => {
       undefined,
       false,
       true,
+      1,
     )
 
     expect(hiddenPolylineKey(['chosen'], gesture, true)).toBe('')

@@ -1,5 +1,5 @@
 import type { Point, Polyline } from './polyline'
-import { selectionBounds, selectionOutsetMm } from './selection'
+import { selectionBounds, selectionOutsetAt } from './selection'
 import type { SelectionBounds } from './selection'
 
 export function scalePolylines(
@@ -15,6 +15,7 @@ export function scalePolylines(
     scene.flatMap((polyline) =>
       selected.has(polyline.id) ? polyline.points : [],
     ),
+    change.zoom,
   )
   if (!bounds) {
     return scene
@@ -87,7 +88,7 @@ function uniformScale(
     return { anchorX: anchor.x, anchorY: anchor.y, x: 1, y: 1 }
   }
 
-  const implied = impliedCorner(change.pointer, change.handle)
+  const implied = impliedCorner(change.pointer, change.handle, change.zoom)
   const projected =
     ((implied.x - anchor.x) * dx + (implied.y - anchor.y) * dy) / lengthSquared
   const factor = clampedUniformFactor(projected, dx, dy)
@@ -108,8 +109,8 @@ function axisScale(
   const moving = side === 'max' ? max : min
   const anchor = change.altHeld ? (min + max) / 2 : side === 'max' ? min : max
   const pointer = axis === 'x' ? change.pointer.x : change.pointer.y
-  const proposed =
-    side === 'max' ? pointer - selectionOutsetMm : pointer + selectionOutsetMm
+  const outset = selectionOutsetAt(change.zoom)
+  const proposed = side === 'max' ? pointer - outset : pointer + outset
   return { anchor, factor: clampedFactor(anchor, moving, proposed) }
 }
 
@@ -187,18 +188,17 @@ function cornerPoint(
   }
 }
 
-function impliedCorner(pointer: Point, handle: ScaleHandle): Point {
+function impliedCorner(
+  pointer: Point,
+  handle: ScaleHandle,
+  zoom: number,
+): Point {
   const xSide = requireEdge(handle, 'x')
   const ySide = requireEdge(handle, 'y')
+  const outset = selectionOutsetAt(zoom)
   return {
-    x:
-      xSide === 'max'
-        ? pointer.x - selectionOutsetMm
-        : pointer.x + selectionOutsetMm,
-    y:
-      ySide === 'max'
-        ? pointer.y - selectionOutsetMm
-        : pointer.y + selectionOutsetMm,
+    x: xSide === 'max' ? pointer.x - outset : pointer.x + outset,
+    y: ySide === 'max' ? pointer.y - outset : pointer.y + outset,
   }
 }
 
@@ -300,17 +300,21 @@ function distanceToSegment(point: Point, start: Point, end: Point): number {
   return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy))
 }
 
-function tightBounds(points: readonly Point[]): SelectionBounds | undefined {
-  const visual = selectionBounds(points)
+function tightBounds(
+  points: readonly Point[],
+  zoom: number,
+): SelectionBounds | undefined {
+  const visual = selectionBounds(points, zoom)
   if (!visual) {
     return undefined
   }
 
+  const outset = selectionOutsetAt(zoom)
   return {
-    minX: visual.minX + selectionOutsetMm,
-    maxX: visual.maxX - selectionOutsetMm,
-    minY: visual.minY + selectionOutsetMm,
-    maxY: visual.maxY - selectionOutsetMm,
+    minX: visual.minX + outset,
+    maxX: visual.maxX - outset,
+    minY: visual.minY + outset,
+    maxY: visual.maxY - outset,
   }
 }
 
@@ -334,6 +338,7 @@ export type PolylineScale = {
   pointer: Point
   shiftHeld: boolean
   altHeld: boolean
+  zoom: number
 }
 
 export type ScaleHandle =

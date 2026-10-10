@@ -21,11 +21,23 @@ describe('polylineAt', () => {
   const scene = [stroke('line', [point(0, 0), point(10, 0)])]
 
   it('hits within 3 mm of the stroke and misses beyond it', () => {
-    expect(polylineAt(scene, point(5, 3))).toBe('line')
-    expect(polylineAt(scene, point(5, -3))).toBe('line')
-    expect(polylineAt(scene, point(12, 0))).toBe('line')
-    expect(polylineAt(scene, point(5, 3.1))).toBeUndefined()
-    expect(polylineAt(scene, point(14, 0))).toBeUndefined()
+    expect(polylineAt(scene, point(5, 3), 1)).toBe('line')
+    expect(polylineAt(scene, point(5, -3), 1)).toBe('line')
+    expect(polylineAt(scene, point(12, 0), 1)).toBe('line')
+    expect(polylineAt(scene, point(5, 3.1), 1)).toBeUndefined()
+    expect(polylineAt(scene, point(14, 0), 1)).toBeUndefined()
+  })
+
+  it('shrinks the slop when zoomed in and grows it when zoomed out', () => {
+    expect(polylineAt(scene, point(5, 1.5), 2)).toBe('line')
+    expect(polylineAt(scene, point(5, 1.6), 2)).toBeUndefined()
+    expect(polylineAt(scene, point(5, 6), 0.5)).toBe('line')
+    expect(polylineAt(scene, point(5, 6.1), 0.5)).toBeUndefined()
+  })
+
+  it('uses the fitted slop when zoom is not positive', () => {
+    expect(polylineAt(scene, point(5, 3), 0)).toBe('line')
+    expect(polylineAt(scene, point(5, 3.1), 0)).toBeUndefined()
   })
 
   it('chooses the later polyline when both are within the slop', () => {
@@ -34,7 +46,7 @@ describe('polylineAt', () => {
       stroke('upper', [point(0, 2), point(10, 2)]),
     ]
 
-    expect(polylineAt(stacked, point(5, 1.2))).toBe('upper')
+    expect(polylineAt(stacked, point(5, 1.2), 1)).toBe('upper')
   })
 
   it('misses the empty inside of a multi-polyline bounds', () => {
@@ -43,7 +55,7 @@ describe('polylineAt', () => {
       stroke('right', [point(40, 0), point(40, 40)]),
     ]
 
-    expect(polylineAt(scene, point(20, 20))).toBeUndefined()
+    expect(polylineAt(scene, point(20, 20), 1)).toBeUndefined()
   })
 
   it('misses the empty inside of the bounds', () => {
@@ -51,7 +63,7 @@ describe('polylineAt', () => {
       stroke('box', [point(0, 0), point(40, 0), point(40, 40), point(0, 40)]),
     ]
 
-    expect(polylineAt(square, point(20, 20))).toBeUndefined()
+    expect(polylineAt(square, point(20, 20), 1)).toBeUndefined()
   })
 
   it('counts the return segment of a closed polyline', () => {
@@ -59,8 +71,8 @@ describe('polylineAt', () => {
     const closed = [stroke('box', square, true)]
     const open = [stroke('box', square, false)]
 
-    expect(polylineAt(closed, point(-3, 5))).toBe('box')
-    expect(polylineAt(open, point(-3, 5))).toBeUndefined()
+    expect(polylineAt(closed, point(-3, 5), 1)).toBe('box')
+    expect(polylineAt(open, point(-3, 5), 1)).toBeUndefined()
   })
 })
 
@@ -107,12 +119,10 @@ describe('touchedPolylineIds', () => {
 describe('selectionBounds', () => {
   it('outsets the union of several polylines by 2 mm', () => {
     expect(
-      selectionBounds([
-        point(0, 0),
-        point(10, 0),
-        point(40, 30),
-        point(50, 10),
-      ]),
+      selectionBounds(
+        [point(0, 0), point(10, 0), point(40, 30), point(50, 10)],
+        1,
+      ),
     ).toEqual({
       minX: -2,
       maxX: 52,
@@ -122,7 +132,32 @@ describe('selectionBounds', () => {
   })
 
   it('outsets one polyline by 2 mm', () => {
-    expect(selectionBounds([point(10, 20), point(30, 50)])).toEqual({
+    expect(selectionBounds([point(10, 20), point(30, 50)], 1)).toEqual({
+      minX: 8,
+      maxX: 32,
+      minY: 18,
+      maxY: 52,
+    })
+  })
+
+  it('pulls the rectangle in when zoomed in and pushes it out when zoomed out', () => {
+    const points = [point(10, 20), point(30, 50)]
+    expect(selectionBounds(points, 2)).toEqual({
+      minX: 9,
+      maxX: 31,
+      minY: 19,
+      maxY: 51,
+    })
+    expect(selectionBounds(points, 0.5)).toEqual({
+      minX: 6,
+      maxX: 34,
+      minY: 16,
+      maxY: 54,
+    })
+  })
+
+  it('uses the fitted outset when zoom is not positive', () => {
+    expect(selectionBounds([point(10, 20), point(30, 50)], 0)).toEqual({
       minX: 8,
       maxX: 32,
       minY: 18,
@@ -131,7 +166,7 @@ describe('selectionBounds', () => {
   })
 
   it('gives a flat polyline height', () => {
-    expect(selectionBounds([point(0, 10), point(40, 10)])).toEqual({
+    expect(selectionBounds([point(0, 10), point(40, 10)], 1)).toEqual({
       minX: -2,
       maxX: 42,
       minY: 8,
@@ -140,7 +175,7 @@ describe('selectionBounds', () => {
   })
 
   it('returns nothing when there are no points', () => {
-    expect(selectionBounds([])).toBeUndefined()
+    expect(selectionBounds([], 1)).toBeUndefined()
   })
 })
 
@@ -148,22 +183,33 @@ describe('pointerTarget', () => {
   const line = stroke('line', [point(0, 0), point(40, 0)])
 
   it('prefers a point handle over the segment while that polyline is edited', () => {
-    expect(pointerTarget([line], point(0, 2), 'line')).toEqual({
+    expect(pointerTarget([line], point(0, 2), 'line', 1)).toEqual({
       id: 'line',
       pointIndex: 0,
     })
-    expect(pointerTarget([line], point(20, 2), 'line')).toEqual({
+    expect(pointerTarget([line], point(20, 2), 'line', 1)).toEqual({
       id: 'line',
       pointIndex: undefined,
     })
-    expect(pointerTarget([line], point(0, 3.1), 'line')).toEqual({
+    expect(pointerTarget([line], point(0, 3.1), 'line', 1)).toEqual({
+      id: undefined,
+      pointIndex: undefined,
+    })
+  })
+
+  it('keeps the point handle at 3 mm when the stroke slop has shrunk', () => {
+    expect(pointerTarget([line], point(0, 2), 'line', 2)).toEqual({
+      id: 'line',
+      pointIndex: 0,
+    })
+    expect(pointerTarget([line], point(20, 2), 'line', 2)).toEqual({
       id: undefined,
       pointIndex: undefined,
     })
   })
 
   it('hits the segment when points are not being edited', () => {
-    expect(pointerTarget([line], point(0, 2), undefined)).toEqual({
+    expect(pointerTarget([line], point(0, 2), undefined, 1)).toEqual({
       id: 'line',
       pointIndex: undefined,
     })
