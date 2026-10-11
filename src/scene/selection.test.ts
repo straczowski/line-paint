@@ -203,12 +203,31 @@ describe('pointerTarget', () => {
     })
   })
 
-  it('keeps the point handle at 3 mm when the stroke slop has shrunk', () => {
-    expect(pointerTarget([line], point(0, 2), 'line', 2)).toEqual({
+  it('shrinks the handle slop when zoomed in and grows it when zoomed out', () => {
+    expect(pointerTarget([line], point(0, 1.5), 'line', 2)).toEqual({
       id: 'line',
       pointIndex: 0,
     })
-    expect(pointerTarget([line], point(20, 2), 'line', 2)).toEqual({
+    expect(pointerTarget([line], point(0, 1.6), 'line', 2)).toEqual({
+      id: undefined,
+      pointIndex: undefined,
+    })
+    expect(pointerTarget([line], point(0, 6), 'line', 0.5)).toEqual({
+      id: 'line',
+      pointIndex: 0,
+    })
+    expect(pointerTarget([line], point(0, 6.1), 'line', 0.5)).toEqual({
+      id: undefined,
+      pointIndex: undefined,
+    })
+  })
+
+  it('uses the fitted handle slop when zoom is not positive', () => {
+    expect(pointerTarget([line], point(0, 3), 'line', 0)).toEqual({
+      id: 'line',
+      pointIndex: 0,
+    })
+    expect(pointerTarget([line], point(0, 3.1), 'line', 0)).toEqual({
       id: undefined,
       pointIndex: undefined,
     })
@@ -269,10 +288,14 @@ describe('insertPolylinePoint', () => {
       stroke('edit', [point(0, 0), point(0, 40), point(40, 40)]),
       stroke('stay', [point(5, 5), point(6, 6)]),
     ]
-    const inserted = insertPolylinePoint(scene, {
-      id: 'edit',
-      point: point(2, 20),
-    })
+    const inserted = insertPolylinePoint(
+      scene,
+      {
+        id: 'edit',
+        point: point(2, 20),
+      },
+      1,
+    )
 
     expect(inserted?.index).toBe(1)
     expect(inserted?.scene[0]?.points).toEqual([
@@ -291,10 +314,14 @@ describe('insertPolylinePoint', () => {
   it('appends a point on the closing segment', () => {
     const square = [point(0, 0), point(10, 0), point(10, 10), point(0, 10)]
     const scene = [stroke('box', square, true)]
-    const inserted = insertPolylinePoint(scene, {
-      id: 'box',
-      point: point(-2, 5),
-    })
+    const inserted = insertPolylinePoint(
+      scene,
+      {
+        id: 'box',
+        point: point(-2, 5),
+      },
+      1,
+    )
 
     expect(inserted?.index).toBe(4)
     expect(inserted?.scene[0]?.points).toEqual([...square, point(0, 5)])
@@ -306,12 +333,48 @@ describe('insertPolylinePoint', () => {
     const scene = [stroke('edit', [point(0, 0), point(0, 40)])]
 
     expect(
-      insertPolylinePoint(scene, { id: 'edit', point: point(3.1, 20) }),
+      insertPolylinePoint(scene, { id: 'edit', point: point(3.1, 20) }, 1),
     ).toBeUndefined()
     expect(
-      insertPolylinePoint(scene, { id: 'edit', point: point(2, 0) }),
+      insertPolylinePoint(scene, { id: 'edit', point: point(2, 0) }, 1),
     ).toBeUndefined()
     expect(scene[0]?.points).toHaveLength(2)
+  })
+
+  it('shrinks the insert slop when zoomed in and grows it when zoomed out', () => {
+    const scene = [stroke('edit', [point(0, 0), point(0, 40)])]
+
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(1.5, 20) }, 2)
+        ?.index,
+    ).toBe(1)
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(1.6, 20) }, 2),
+    ).toBeUndefined()
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(2, 5) }, 2),
+    ).toBeUndefined()
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(1.5, 0) }, 2),
+    ).toBeUndefined()
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(6, 20) }, 0.5)
+        ?.index,
+    ).toBe(1)
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(6.1, 20) }, 0.5),
+    ).toBeUndefined()
+  })
+
+  it('uses the fitted insert slop when zoom is not positive', () => {
+    const scene = [stroke('edit', [point(0, 0), point(0, 40)])]
+
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(3, 20) }, 0)?.index,
+    ).toBe(1)
+    expect(
+      insertPolylinePoint(scene, { id: 'edit', point: point(3.1, 20) }, 0),
+    ).toBeUndefined()
   })
 })
 

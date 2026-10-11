@@ -322,7 +322,7 @@ export function pointerTarget(
     ? scene.find((polyline) => polyline.id === editingId)
     : undefined
   if (editing) {
-    const pointIndex = pointIndexAt(editing, point)
+    const pointIndex = pointIndexAt(editing, point, zoom)
     if (pointIndex !== undefined) {
       return { id: editing.id, pointIndex }
     }
@@ -364,13 +364,14 @@ export function deletePolylinePoint(
 export function insertPolylinePoint(
   scene: readonly Polyline[],
   insert: PointInsert,
+  zoom: number,
 ): PointInsertion | undefined {
   const polyline = requirePolyline(scene, insert.id)
-  if (pointIndexAt(polyline, insert.point) !== undefined) {
+  if (pointIndexAt(polyline, insert.point, zoom) !== undefined) {
     return undefined
   }
 
-  const placement = segmentPlacement(polyline, insert.point)
+  const placement = segmentPlacement(polyline, insert.point, zoom)
   if (!placement) {
     return undefined
   }
@@ -386,9 +387,13 @@ export function insertPolylinePoint(
   }
 }
 
-function pointIndexAt(polyline: Polyline, point: Point): number | undefined {
+function pointIndexAt(
+  polyline: Polyline,
+  point: Point,
+  zoom: number,
+): number | undefined {
   let closestIndex: number | undefined
-  let closestDistance = hitSlopMm
+  let closestDistance = hitSlopAt(zoom)
   for (let index = 0; index < polyline.points.length; index += 1) {
     const vertex = polyline.points[index]
     if (!vertex) {
@@ -520,10 +525,11 @@ function segmentsOf(polyline: Polyline): readonly Segment[] {
 function segmentPlacement(
   polyline: Polyline,
   point: Point,
+  zoom: number,
 ): SegmentPlacement | undefined {
   let closestIndex = -1
   let closestPoint: Point | undefined
-  let closestDistance = hitSlopMm
+  let closestDistance = hitSlopAt(zoom)
   const segments = segmentsOf(polyline)
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index]

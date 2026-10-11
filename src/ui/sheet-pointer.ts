@@ -268,10 +268,14 @@ function insertEditedPoint(
     return false
   }
 
-  const inserted = insertPolylinePoint(input.scene, {
-    id: editingId,
-    point,
-  })
+  const inserted = insertPolylinePoint(
+    input.scene,
+    {
+      id: editingId,
+      point,
+    },
+    input.zoom,
+  )
   if (!inserted) {
     return false
   }
