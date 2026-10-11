@@ -1,6 +1,10 @@
 import { previewStrokePoints } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
-import { hiddenPolylineIds, selectionBounds } from '../scene/selection'
+import {
+  hiddenPolylineIds,
+  selectionBounds,
+  selectionIsOneGroup,
+} from '../scene/selection'
 import type { DragHide, SelectionBounds } from '../scene/selection'
 import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
 import { scalePolylines } from '../scene/scale'
@@ -45,6 +49,7 @@ export function overlayFrame(
       zoom,
     ),
     bounds,
+    dashed: selectionIsOneGroup(scene, bounds ? selectedIds : []),
     marquee:
       gesture?.kind === 'marquee'
         ? { start: gesture.startScene, end: gesture.currentScene }
@@ -355,6 +360,7 @@ export type OverlayFrame = {
     widthMm: number
   }[]
   bounds: SelectionBounds | undefined
+  dashed: boolean
   marquee: { start: Point; end: Point } | undefined
   handles: readonly { point: Point; selected: boolean }[]
   scaleHandles: boolean

@@ -29,11 +29,12 @@ When a polyline is selected, the left panel has one toggle: open or closed. Clos
 
 ## Selection
 
-- Click a polyline to select the whole object. Hold Shift while clicking another polyline to add that one to the selection. Drag the selection to move it.
-- Drag on empty canvas to draw a rectangle. Every polyline that rectangle touches is selected.
-- Double-click a polyline to edit its points. In that mode a point can be dragged, and Backspace deletes the selected point.
-- A drag that ends while Alt is held duplicates the polyline and leaves the copy where the drag ends.
-- Drag a corner or a side of the selection rectangle to scale the selected polylines. Rotate is not part of this.
+- Click a polyline to select the whole object. A grouped polyline selects every polyline in its outermost group. Hold Shift while clicking another object to add it to the selection. Drag the selection to move it.
+- Drag on empty canvas to draw a rectangle. Every polyline that rectangle touches is selected. Touching a member of a group selects that whole group.
+- Double-click a loose polyline to edit its points. Double-click a grouped polyline enters that group one level and selects the next object under the pointer. Double-click that polyline again to edit its points. In that mode a point can be dragged, and Backspace deletes the selected point. A click outside the entered group leaves it.
+- Command+G groups the selection. Command+Shift+G ungroups one level. A group can contain a group.
+- A drag that ends while Alt is held duplicates the polyline and leaves the copy where the drag ends. Duplicating a group copies the group.
+- Drag a corner or a side of the selection rectangle to scale the selected polylines. The rectangle is dashed when the selection is one group. Rotate is not part of this.
 
 ## Export
 
@@ -52,16 +53,4 @@ GCode, same idea as line-weaver's `generateGcode` and `convertToGcodeCommands`:
 
 ## Import
 
-The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet.
-
-## Later
-
-Not part of the current drawing tool:
-
-- Selected polylines can be grouped and ungrouped. A group selects and moves as one object. Nested groups are not part of this concept.
-- Rectangles, circles, and other shapes
-- Rotate a polyline
-- Portrait. Same origin: bottom-left, Y up, on a sheet 210 mm wide and 297 mm tall. The plotter bed stays landscape, so GCode export rotates the points 90° onto that bed. The rotation is not a mirror. Which way the paper turns is chosen when portrait is built
-- A control for sheet size
-- A background image for tracing
-- Typography
+The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet, as one group.

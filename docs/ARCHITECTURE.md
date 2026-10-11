@@ -29,7 +29,7 @@ SVG and GCode are export formats. They are not the live editor. An SVG DOM gets 
 
 The scene is an ordered list of elements in document coordinates, as in [CONCEPT.md](CONCEPT.md): millimeters, origin at the bottom-left, Y up. A stroke is a sequence of points plus the stroke color and width from [DESIGN.md](DESIGN.md). Pan and zoom belong to the viewport. They change how the canvas is painted. They do not change the points that will be exported.
 
-The canvas origin is the top-left and its Y grows down. Scene coordinates stay bottom-left, Y up. `sceneYToTop` in `src/scene/sheet.ts` converts scene Y onto that top-down axis. `src/render/paint-sheet.ts` and SVG export call it. Landscape GCode copies the scene numbers. Portrait stays on the Later list in [CONCEPT.md](CONCEPT.md).
+The canvas origin is the top-left and its Y grows down. Scene coordinates stay bottom-left, Y up. `sceneYToTop` in `src/scene/sheet.ts` converts scene Y onto that top-down axis. `src/render/paint-sheet.ts` and SVG export call it. Landscape GCode copies the scene numbers.
 
 React and the canvases both read this scene. They do not keep a second copy of the geometry. Pointer events land on the overlay canvas. React does not receive the drag that creates a point.
 

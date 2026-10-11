@@ -23,6 +23,20 @@ describe('appendImportedPolylines', () => {
       widthMm: 0.5,
     })
     expect(next[1]?.id).not.toBe(kept.id)
+    expect(next[1]?.groupIds).toHaveLength(1)
+  })
+
+  it('puts every polyline from one file in the same group', () => {
+    const next = appendImportedPolylines(
+      [],
+      [
+        importedLine([point(0, 0), point(1, 0)]),
+        importedLine([point(2, 0), point(3, 0)]),
+      ],
+    )
+
+    expect(next[0]?.groupIds).toEqual(next[1]?.groupIds)
+    expect(next[0]?.groupIds?.[0]).not.toBe(next[1]?.id)
   })
 
   it('adds nothing when the import has no polylines', () => {

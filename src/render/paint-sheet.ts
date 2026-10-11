@@ -29,6 +29,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
     draftPoints,
     preview,
     bounds,
+    dashed,
     scaleHandles,
     marquee,
     handles,
@@ -52,7 +53,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
     })
   }
   if (bounds) {
-    strokeSelectionBounds(context, { bounds, fit })
+    strokeSelectionBounds(context, { bounds, fit, dashed })
     if (scaleHandles) {
       paintScaleHandles(context, bounds, fit)
     }
@@ -114,12 +115,14 @@ function strokeSelectionBounds(
   )
   context.strokeStyle = selectionColor
   context.lineWidth = 1
+  context.setLineDash(paint.dashed ? groupDash : [])
   context.strokeRect(
     topLeft.x,
     topLeft.y,
     bottomRight.x - topLeft.x,
     bottomRight.y - topLeft.y,
   )
+  context.setLineDash([])
 }
 
 function paintScaleHandles(
@@ -285,6 +288,7 @@ type SheetContext = {
   lineJoin: CanvasLineJoin
   fillRect(x: number, y: number, width: number, height: number): void
   clearRect(x: number, y: number, width: number, height: number): void
+  setLineDash(segments: readonly number[]): void
   strokeRect(x: number, y: number, width: number, height: number): void
   beginPath(): void
   moveTo(x: number, y: number): void
@@ -304,6 +308,7 @@ const outsideSheet = '#f1f3f5'
 const canvasWhite = '#ffffff'
 const sheetHairline = '#c5c5d0'
 const selectionColor = '#6965db'
+const groupDash = [4, 3]
 const minimumStrokePx = 1
 
 type PaintStaticCanvasInput = {
@@ -318,6 +323,7 @@ type PaintOverlayInput = {
   draftPoints: readonly Point[]
   preview: readonly SelectionStroke[]
   bounds: SelectionBounds | undefined
+  dashed: boolean
   scaleHandles: boolean
   marquee: Marquee | undefined
   handles: readonly Handle[]
@@ -344,6 +350,7 @@ type Marquee = {
 type BoundsPaint = {
   bounds: SelectionBounds
   fit: SheetFit
+  dashed: boolean
 }
 
 type MarqueePaint = Marquee & {

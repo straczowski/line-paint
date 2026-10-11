@@ -61,6 +61,7 @@ export type Polyline = {
   closed: boolean
   stroke: string
   widthMm: number
+  groupIds?: readonly string[]
 }
 
 export type PolylineDraft = {

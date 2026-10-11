@@ -73,6 +73,7 @@ describe('selection paint', () => {
         { points: chosen.points, closed: true, widthMm: chosen.widthMm },
       ],
       bounds: undefined,
+      dashed: false,
       scaleHandles: false,
       marquee: undefined,
       handles: [],
@@ -81,6 +82,36 @@ describe('selection paint', () => {
     })
 
     expect(accent.strokes).toEqual(['#6965db'])
+
+    const dashed = new RecordingPen()
+    paintOverlay({
+      context: dashed,
+      draftPoints: [],
+      preview: [],
+      bounds: { minX: 0, maxX: 10, minY: 0, maxY: 10 },
+      dashed: true,
+      scaleHandles: false,
+      marquee: undefined,
+      handles: [],
+      fit,
+      size,
+    })
+    const solid = new RecordingPen()
+    paintOverlay({
+      context: solid,
+      draftPoints: [],
+      preview: [],
+      bounds: { minX: 0, maxX: 10, minY: 0, maxY: 10 },
+      dashed: false,
+      scaleHandles: false,
+      marquee: undefined,
+      handles: [],
+      fit,
+      size,
+    })
+
+    expect(dashed.dashes).toEqual([[4, 3], []])
+    expect(solid.dashes).toEqual([[], []])
     const line = accent.lines[0]
     expect(line?.[0]).toEqual(point(0, 210))
     expect(line?.[line.length - 1]).toEqual(line?.[0])
@@ -93,6 +124,7 @@ describe('selection paint', () => {
       draftPoints: [point(1, 2), point(4, 5)],
       preview: [],
       bounds: undefined,
+      dashed: false,
       scaleHandles: false,
       marquee: undefined,
       handles: [],
@@ -135,6 +167,12 @@ class RecordingPen {
     }
   }
   clearRect(): void {}
+  dash: readonly number[] = []
+  readonly dashes: number[][] = []
+  setLineDash(segments: readonly number[]): void {
+    this.dash = segments
+    this.dashes.push([...segments])
+  }
   strokeRect(): void {}
   beginPath(): void {}
   arc(): void {}

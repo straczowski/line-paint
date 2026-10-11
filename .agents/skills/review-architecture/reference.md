@@ -34,4 +34,4 @@ A long file that is one parser or one painter is a weaker finding than a shorter
 - A state library, router, or CSS framework. `docs/ARCHITECTURE.md` already chooses against them.
 - A shared helper for a function that exists twice. `docs/engineering-principles/06-locality-principle.md` keeps a helper next to its use until a third caller needs it.
 - A new directory that renames an existing one.
-- Rewriting specs. They are history. Update `docs/CONCEPT.md` when a "Later" item has shipped.
+- Rewriting specs. They are history. Update `docs/CONCEPT.md` when a shipped spec changes what the product does.

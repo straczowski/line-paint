@@ -22,13 +22,13 @@ Do not start editing until this file and that one file are loaded. Do not replac
 
 Each line of code adds complexity and makes the program harder to maintain. A line that does not change what the user asked for is slop. Delete it, or do not write it.
 
-Slop includes a wrapper around one call, a generic helper with one use, a parameter for a case that does not exist, a dependency [ARCHITECTURE.md](ARCHITECTURE.md) does not list, a feature from the "Later" list in [CONCEPT.md](CONCEPT.md), and code left in place "so we can use it later."
+Slop includes a wrapper around one call, a generic helper with one use, a parameter for a case that does not exist, a dependency [ARCHITECTURE.md](ARCHITECTURE.md) does not list, and code left in place "so we can use it later."
 
 ## Three laws
 
 Open one of these when it is the file the edit needs. Do not fetch the website.
 
-- [YAGNI](laws-of-software/yagni.md). Build only what the current request needs. The "Later" section of CONCEPT.md is a list of things not to build.
+- [YAGNI](laws-of-software/yagni.md). Build only what the current request needs.
 - [KISS](laws-of-software/kiss.md). Prefer the smallest change that does the job. Do not add a framework, a layer, or an abstraction for a single use.
 - [Premature optimization](laws-of-software/premature-optimization.md). Do not add caches, indexes, workers, or other speed machinery until a measured problem exists. The two canvases in ARCHITECTURE.md are a structure decision, not a license to optimize further.
 

@@ -27,13 +27,13 @@ Answer each one from the current tree:
 
 ## Steps
 
-1. Read `AGENTS.md`, `docs/ARCHITECTURE.md`, and the "Later" section of `docs/CONCEPT.md`.
+1. Read `AGENTS.md`, `docs/ARCHITECTURE.md`, and `docs/CONCEPT.md`.
 2. List `src/`. For every `.ts` and `.tsx` file, record line count and character count. Estimate tokens as characters divided by 3.5.
 3. Check the written rules against imports:
    - `src/scene/` does not import React and does not touch `document`.
    - `src/render/` is the only folder that paints canvas pixels.
    - `src/ui/` does not write canvas pixels.
-4. Diff the docs against the tree. A sentence that names a tree which no longer exists is a finding. A "Later" item that a spec already shipped is a finding.
+4. Diff the docs against the tree. A sentence that names a tree which no longer exists is a finding. A sentence in `docs/CONCEPT.md` that a spec already replaced is a finding.
 5. Apply the file budget in [reference.md](reference.md). Name the concern inside an oversized file. Length starts the look. Mixed concerns decide the split.
 6. Count the docs an agent must read before a small edit. If that set is large next to the active-context budget, name it. Do not delete those docs.
 7. Recommend the smallest change that removes the worst finding. Do not recommend a new library, a state store, a barrel file, or a layer with one use. Those violate `docs/CODING.md`.

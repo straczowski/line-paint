@@ -6,7 +6,7 @@ import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
 import {
-  deletePolylines,
+  enteredGroupAfterRemoval,
   sceneWithoutHiddenPolylines,
 } from '../scene/selection'
 import {
@@ -23,6 +23,7 @@ import type { Scene, SheetFit, WindowSize } from '../scene/sheet'
 import {
   useCommandDuplicate,
   useFinishOnEnter,
+  useGroupShortcut,
   useHeldKey,
   useSelectBackspace,
 } from './commands'
@@ -57,6 +58,7 @@ export function App() {
   const [tool, setTool] = useState<Tool>('polyline')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [enteredGroupId, setEnteredGroupId] = useState<string>()
   const [duplicateDelta, setDuplicateDelta] = useState<Point>()
   const [pointEdit, setPointEdit] = useState<PointEdit>()
   const [gesture, setGesture] = useState<SelectGesture>()
@@ -92,6 +94,7 @@ export function App() {
       clearDraft()
     } else {
       setSelectedIds([])
+      setEnteredGroupId(undefined)
       setDuplicateDelta(undefined)
       setPointEdit(undefined)
     }
@@ -133,6 +136,7 @@ export function App() {
     tool,
     scene,
     selectedIds,
+    enteredGroupId,
     pointEdit,
     gestureRef,
     draftCountRef,
@@ -140,6 +144,7 @@ export function App() {
     setDraftPoints,
     setFollower,
     setSelectedIds,
+    setEnteredGroupId,
     setDuplicateDelta,
     setPointEdit,
     setGesture,
@@ -151,8 +156,12 @@ export function App() {
       return
     }
 
-    setScene((current) => deletePolylines(current, selectedIds))
+    const remaining = scene.filter(
+      (polyline) => !selectedIds.includes(polyline.id),
+    )
+    setScene(remaining)
     setSelectedIds([])
+    setEnteredGroupId(enteredGroupAfterRemoval(remaining, enteredGroupId))
     setDuplicateDelta(undefined)
     setPointEdit(undefined)
     gestureRef.current = undefined
@@ -162,16 +171,20 @@ export function App() {
     tool,
     scene,
     pointEdit,
+    enteredGroupId,
     deleteSelection,
     setScene,
     setSelectedIds,
+    setEnteredGroupId,
     setDuplicateDelta,
     setPointEdit,
   )
   useCommandDuplicate(
     tool,
+    scene,
     selectedIds,
     duplicateDelta,
+    enteredGroupId,
     gestureRef,
     setScene,
     setSelectedIds,
@@ -179,6 +192,7 @@ export function App() {
     setPointEdit,
     setGesture,
   )
+  useGroupShortcut(tool, scene, selectedIds, enteredGroupId, setScene)
   useFinishOnEnter(finishDraft)
 
   const showHint =
@@ -197,6 +211,7 @@ export function App() {
   const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
     setScene((current) => appendImportedPolylines(current, polylines))
     setSelectedIds([])
+    setEnteredGroupId(undefined)
     setDuplicateDelta(undefined)
     setPointEdit(undefined)
     clearDraft()
@@ -342,6 +357,7 @@ function useOverlayPicture(
       draftPoints: frame.draftPoints,
       preview: frame.preview,
       bounds: frame.bounds,
+      dashed: frame.dashed,
       scaleHandles: frame.scaleHandles,
       marquee: frame.marquee,
       handles: frame.handles,

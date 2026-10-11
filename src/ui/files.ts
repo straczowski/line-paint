@@ -98,7 +98,18 @@ export function appendImportedPolylines(
   scene: readonly Polyline[],
   imported: readonly ImportedPolyline[],
 ): readonly Polyline[] {
-  return [...scene, ...imported.map(polylineWithNewId)]
+  if (imported.length === 0) {
+    return scene
+  }
+
+  const groupId = crypto.randomUUID()
+  return [
+    ...scene,
+    ...imported.map((polyline) => ({
+      ...polylineWithNewId(polyline),
+      groupIds: [groupId],
+    })),
+  ]
 }
 
 function polylineWithNewId(polyline: ImportedPolyline): Polyline {

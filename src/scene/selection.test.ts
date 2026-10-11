@@ -7,10 +7,16 @@ import {
   movePolylinePoint,
   pointerTarget,
   polylineAt,
+  selectionAfterClick,
+  selectionAfterDoubleClick,
+  selectionAfterMarquee,
   selectionBounds,
+  selectionIsOneGroup,
   touchedPolylineIds,
+  ungroupPolylines,
   duplicateDeltaAfterSelection,
   duplicatePolylines,
+  groupPolylines,
   hiddenPolylineIds,
   nextDuplicateDelta,
   sceneWithoutHiddenPolylines,
@@ -531,6 +537,172 @@ describe('deletePolylines', () => {
   it('returns the same scene when nothing is selected', () => {
     const scene = [stroke('stay', [point(0, 0), point(1, 1)])]
     expect(deletePolylines(scene, [])).toBe(scene)
+  })
+})
+
+describe('groups', () => {
+  const loose = [
+    stroke('a', [point(0, 0), point(1, 0)]),
+    stroke('b', [point(2, 0), point(3, 0)]),
+    stroke('c', [point(4, 0), point(5, 0)]),
+  ]
+
+  it('groups two polylines and refuses a group that is already one', () => {
+    const grouped = groupPolylines(loose, {
+      ids: ['a', 'b'],
+      groupId: 'outer',
+      enteredGroupId: undefined,
+    })
+
+    expect(grouped[0]?.groupIds).toEqual(['outer'])
+    expect(grouped[1]?.groupIds).toEqual(['outer'])
+    expect(grouped[2]?.groupIds).toBeUndefined()
+    expect(
+      groupPolylines(grouped, {
+        ids: ['a', 'b'],
+        groupId: 'again',
+        enteredGroupId: undefined,
+      }),
+    ).toBe(grouped)
+    expect(
+      groupPolylines(loose, {
+        ids: ['a'],
+        groupId: 'one',
+        enteredGroupId: undefined,
+      }),
+    ).toBe(loose)
+  })
+
+  it('wraps a group in a new one and ungroups one level', () => {
+    const inner = groupPolylines(loose, {
+      ids: ['a', 'b'],
+      groupId: 'inner',
+      enteredGroupId: undefined,
+    })
+    const outer = groupPolylines(inner, {
+      ids: ['a', 'b', 'c'],
+      groupId: 'outer',
+      enteredGroupId: undefined,
+    })
+
+    expect(outer[0]?.groupIds).toEqual(['inner', 'outer'])
+    expect(outer[2]?.groupIds).toEqual(['outer'])
+
+    const peeled = ungroupPolylines(outer, {
+      ids: ['a', 'b', 'c'],
+      enteredGroupId: undefined,
+    })
+    expect(peeled[0]?.groupIds).toEqual(['inner'])
+    expect(peeled[2]?.groupIds).toBeUndefined()
+    expect(
+      ungroupPolylines(peeled, {
+        ids: ['a', 'b'],
+        enteredGroupId: undefined,
+      })[0]?.groupIds,
+    ).toBeUndefined()
+  })
+
+  it('inserts and removes a group inside the entered group', () => {
+    const entered = groupPolylines(loose, {
+      ids: ['a', 'b', 'c'],
+      groupId: 'room',
+      enteredGroupId: undefined,
+    })
+    const nested = groupPolylines(entered, {
+      ids: ['a', 'c'],
+      groupId: 'inner',
+      enteredGroupId: 'room',
+    })
+
+    expect(nested[0]?.groupIds).toEqual(['inner', 'room'])
+    expect(nested[1]?.groupIds).toEqual(['room'])
+    expect(nested[2]?.groupIds).toEqual(['inner', 'room'])
+
+    const peeled = ungroupPolylines(nested, {
+      ids: ['a', 'c'],
+      enteredGroupId: 'room',
+    })
+    expect(peeled[0]?.groupIds).toEqual(['room'])
+    expect(peeled[2]?.groupIds).toEqual(['room'])
+  })
+
+  it('selects a whole group from a click or a marquee, and one child after entering', () => {
+    const scene = groupPolylines(loose, {
+      ids: ['a', 'b'],
+      groupId: 'outer',
+      enteredGroupId: undefined,
+    })
+
+    expect(selectionAfterClick(scene, [], 'a', undefined, false).ids).toEqual([
+      'a',
+      'b',
+    ])
+    expect(selectionAfterMarquee(scene, ['b'], undefined)).toEqual(['a', 'b'])
+
+    const entered = selectionAfterDoubleClick(scene, 'a', undefined)
+    expect(entered).toEqual({
+      ids: ['a'],
+      enteredGroupId: 'outer',
+      editPoints: false,
+    })
+    expect(selectionAfterClick(scene, [], 'a', 'outer', false).ids).toEqual([
+      'a',
+    ])
+    expect(selectionAfterMarquee(scene, ['a'], 'outer')).toEqual(['a'])
+    expect(selectionAfterClick(scene, ['c'], 'a', undefined, true).ids).toEqual(
+      ['c', 'a', 'b'],
+    )
+    expect(selectionAfterDoubleClick(scene, 'a', 'outer')).toEqual({
+      ids: ['a'],
+      enteredGroupId: 'outer',
+      editPoints: true,
+    })
+    expect(selectionAfterClick(scene, ['a'], 'c', 'outer', false)).toEqual({
+      ids: ['c'],
+      enteredGroupId: undefined,
+    })
+    expect(selectionIsOneGroup(scene, ['a', 'b'])).toBe(true)
+    expect(selectionIsOneGroup(scene, ['a'])).toBe(false)
+  })
+
+  it('keeps the inner group when a nested selection is duplicated', () => {
+    const scene = groupPolylines(
+      groupPolylines(loose, {
+        ids: ['a', 'b'],
+        groupId: 'inner',
+        enteredGroupId: undefined,
+      }),
+      {
+        ids: ['a', 'b', 'c'],
+        groupId: 'outer',
+        enteredGroupId: undefined,
+      },
+    )
+    const copied = duplicatePolylines(scene, {
+      ids: ['a', 'b'],
+      newIds: ['a2', 'b2'],
+      delta: point(10, 0),
+      enteredGroupId: 'outer',
+      newGroupIds: ['inner-copy'],
+    })
+
+    expect(copied[3]?.groupIds).toEqual(['inner-copy', 'outer'])
+    expect(copied[4]?.groupIds).toEqual(['inner-copy', 'outer'])
+    expect(copied[0]?.groupIds).toEqual(['inner', 'outer'])
+
+    const top = duplicatePolylines(scene, {
+      ids: ['a', 'b'],
+      newIds: ['a3', 'b3'],
+      delta: point(0, 10),
+      newGroupIds: ['inner-copy', 'outer-copy'],
+    })
+    expect(top[3]?.groupIds).toEqual(['inner-copy', 'outer-copy'])
+    expect(top[4]?.groupIds).toEqual(['inner-copy', 'outer-copy'])
+
+    const entered = selectionAfterDoubleClick(scene, 'a', undefined)
+    expect(entered.enteredGroupId).toBe('outer')
+    expect(entered.ids).toEqual(['a', 'b'])
+    expect(entered.editPoints).toBe(false)
   })
 })
 

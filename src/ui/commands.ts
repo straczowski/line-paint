@@ -4,7 +4,11 @@ import type { Point } from '../scene/polyline'
 import {
   deletePolylinePoint,
   duplicatePolylines,
+  enteredGroupAfterRemoval,
+  groupIdsToRenew,
+  groupPolylines,
   nextDuplicateDelta,
+  ungroupPolylines,
 } from '../scene/selection'
 import type { PointDelete } from '../scene/selection'
 import type { Scene } from '../scene/sheet'
@@ -49,9 +53,11 @@ export function useSelectBackspace(
   tool: Tool,
   scene: Scene,
   pointEdit: PointEdit | undefined,
+  enteredGroupId: string | undefined,
   deleteSelection: () => void,
   setScene: Dispatch<SetStateAction<Scene>>,
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setEnteredGroupId: Dispatch<SetStateAction<string | undefined>>,
   setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
 ): void {
@@ -69,8 +75,10 @@ export function useSelectBackspace(
         deleteSelectedPoint(
           scene,
           { id: pointEdit.id, index: pointEdit.pointIndex },
+          enteredGroupId,
           setScene,
           setSelectedIds,
+          setEnteredGroupId,
           setDuplicateDelta,
           setPointEdit,
         )
@@ -84,9 +92,11 @@ export function useSelectBackspace(
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     deleteSelection,
+    enteredGroupId,
     pointEdit,
     scene,
     setDuplicateDelta,
+    setEnteredGroupId,
     setPointEdit,
     setScene,
     setSelectedIds,
@@ -96,8 +106,10 @@ export function useSelectBackspace(
 
 export function useCommandDuplicate(
   tool: Tool,
+  scene: Scene,
   selectedIds: readonly string[],
   duplicateDelta: Point | undefined,
+  enteredGroupId: string | undefined,
   gestureRef: RefObject<SelectGesture | undefined>,
   setScene: Dispatch<SetStateAction<Scene>>,
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
@@ -106,17 +118,27 @@ export function useCommandDuplicate(
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>,
 ): void {
   const [latest] = useState(() => {
-    let current = { selectedIds, duplicateDelta }
+    let current = { scene, selectedIds, duplicateDelta, enteredGroupId }
     return {
       read() {
         return current
       },
-      write(nextIds: readonly string[], nextDelta: Point | undefined) {
-        current = { selectedIds: nextIds, duplicateDelta: nextDelta }
+      write(
+        nextScene: Scene,
+        nextIds: readonly string[],
+        nextDelta: Point | undefined,
+        nextEntered: string | undefined,
+      ) {
+        current = {
+          scene: nextScene,
+          selectedIds: nextIds,
+          duplicateDelta: nextDelta,
+          enteredGroupId: nextEntered,
+        }
       },
     }
   })
-  latest.write(selectedIds, duplicateDelta)
+  latest.write(scene, selectedIds, duplicateDelta, enteredGroupId)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -132,14 +154,20 @@ export function useCommandDuplicate(
 
       const delta = nextDuplicateDelta(selection.duplicateDelta)
       const newIds = selection.selectedIds.map(() => crypto.randomUUID())
-      latest.write(newIds, delta)
-      setScene((current) =>
-        duplicatePolylines(current, {
-          ids: selection.selectedIds,
-          newIds,
-          delta,
-        }),
+      const oldGroupIds = groupIdsToRenew(
+        selection.scene,
+        selection.selectedIds,
+        selection.enteredGroupId,
       )
+      const nextScene = duplicatePolylines(selection.scene, {
+        ids: selection.selectedIds,
+        newIds,
+        delta,
+        enteredGroupId: selection.enteredGroupId,
+        newGroupIds: oldGroupIds.map(() => crypto.randomUUID()),
+      })
+      latest.write(nextScene, newIds, delta, selection.enteredGroupId)
+      setScene(nextScene)
       setSelectedIds(newIds)
       setDuplicateDelta(delta)
       setPointEdit(undefined)
@@ -186,11 +214,75 @@ function isPlainBackspace(event: KeyboardEvent): boolean {
   )
 }
 
+export function useGroupShortcut(
+  tool: Tool,
+  scene: Scene,
+  selectedIds: readonly string[],
+  enteredGroupId: string | undefined,
+  setScene: Dispatch<SetStateAction<Scene>>,
+): void {
+  const [latest] = useState(() => {
+    let current = { scene, selectedIds, enteredGroupId }
+    return {
+      read() {
+        return current
+      },
+      write(
+        nextScene: Scene,
+        nextIds: readonly string[],
+        nextEntered: string | undefined,
+      ) {
+        current = {
+          scene: nextScene,
+          selectedIds: nextIds,
+          enteredGroupId: nextEntered,
+        }
+      },
+    }
+  })
+  latest.write(scene, selectedIds, enteredGroupId)
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isCommandGroup(event) || tool !== 'select') {
+        return
+      }
+
+      event.preventDefault()
+      const selection = latest.read()
+      if (event.repeat || selection.selectedIds.length === 0) {
+        return
+      }
+
+      const next = event.shiftKey
+        ? ungroupPolylines(selection.scene, {
+            ids: selection.selectedIds,
+            enteredGroupId: selection.enteredGroupId,
+          })
+        : groupPolylines(selection.scene, {
+            ids: selection.selectedIds,
+            groupId: crypto.randomUUID(),
+            enteredGroupId: selection.enteredGroupId,
+          })
+      if (next === selection.scene) {
+        return
+      }
+      latest.write(next, selection.selectedIds, selection.enteredGroupId)
+      setScene(next)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [latest, setScene, tool])
+}
+
 function deleteSelectedPoint(
   scene: Scene,
   target: PointDelete,
+  enteredGroupId: string | undefined,
   setScene: Dispatch<SetStateAction<Scene>>,
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
+  setEnteredGroupId: Dispatch<SetStateAction<string | undefined>>,
   setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
 ): void {
@@ -201,6 +293,7 @@ function deleteSelectedPoint(
 
   const next = deletePolylinePoint(scene, target)
   setScene(next)
+  setEnteredGroupId(enteredGroupAfterRemoval(next, enteredGroupId))
   if (next.some((item) => item.id === target.id)) {
     setPointEdit({ id: target.id, pointIndex: undefined })
     return
@@ -209,6 +302,15 @@ function deleteSelectedPoint(
   setSelectedIds([])
   setDuplicateDelta(undefined)
   setPointEdit(undefined)
+}
+
+function isCommandGroup(event: KeyboardEvent): boolean {
+  return (
+    event.key.toLowerCase() === 'g' &&
+    event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  )
 }
 
 function isCommandDuplicate(event: KeyboardEvent): boolean {

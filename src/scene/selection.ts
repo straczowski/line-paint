@@ -98,6 +98,198 @@ export function deletePolylines(
   return next.length === scene.length ? scene : next
 }
 
+export function groupPolylines(
+  scene: readonly Polyline[],
+  change: PolylineGroup,
+): readonly Polyline[] {
+  if (change.ids.length < 2 || alreadyOneGroup(scene, change)) {
+    return scene
+  }
+
+  const selected = new Set(change.ids)
+  let changed = false
+  const next = scene.map((polyline) => {
+    if (!selected.has(polyline.id)) {
+      return polyline
+    }
+    changed = true
+    return withGroupIds(
+      polyline,
+      insertedGroupId(
+        groupIdsOf(polyline),
+        change.groupId,
+        change.enteredGroupId,
+      ),
+    )
+  })
+  return changed ? next : scene
+}
+
+export function ungroupPolylines(
+  scene: readonly Polyline[],
+  change: PolylineUngroup,
+): readonly Polyline[] {
+  const selected = new Set(change.ids)
+  let changed = false
+  const next = scene.map((polyline) => {
+    if (!selected.has(polyline.id)) {
+      return polyline
+    }
+    const groupIds = groupIdsWithoutOuter(
+      groupIdsOf(polyline),
+      change.enteredGroupId,
+    )
+    if (!groupIds) {
+      return polyline
+    }
+    changed = true
+    return withGroupIds(polyline, groupIds)
+  })
+  return changed ? next : scene
+}
+
+export function selectionAfterClick(
+  scene: readonly Polyline[],
+  selectedIds: readonly string[],
+  hitId: string,
+  enteredGroupId: string | undefined,
+  shiftHeld: boolean,
+): GroupSelection {
+  const polyline = scene.find((item) => item.id === hitId)
+  if (!polyline) {
+    return { ids: selectedIds, enteredGroupId }
+  }
+  if (enteredGroupId && !groupIdsOf(polyline).includes(enteredGroupId)) {
+    return selectionAfterClick(scene, selectedIds, hitId, undefined, false)
+  }
+
+  const ids = unitIds(scene, polyline, enteredGroupId)
+  if (!shiftHeld) {
+    return { ids, enteredGroupId }
+  }
+  if (ids.every((id) => selectedIds.includes(id))) {
+    return { ids: selectedIds, enteredGroupId }
+  }
+  return {
+    ids: [...selectedIds, ...ids.filter((id) => !selectedIds.includes(id))],
+    enteredGroupId,
+  }
+}
+
+export function selectionAfterMarquee(
+  scene: readonly Polyline[],
+  touchedIds: readonly string[],
+  enteredGroupId: string | undefined,
+): readonly string[] {
+  const ids: string[] = []
+  for (const hitId of touchedIds) {
+    const polyline = scene.find((item) => item.id === hitId)
+    if (!polyline) {
+      continue
+    }
+    if (enteredGroupId && !groupIdsOf(polyline).includes(enteredGroupId)) {
+      continue
+    }
+    for (const id of unitIds(scene, polyline, enteredGroupId)) {
+      if (!ids.includes(id)) {
+        ids.push(id)
+      }
+    }
+  }
+  return ids
+}
+
+export function selectionAfterDoubleClick(
+  scene: readonly Polyline[],
+  hitId: string,
+  enteredGroupId: string | undefined,
+): DoubleClickSelection {
+  const polyline = scene.find((item) => item.id === hitId)
+  if (!polyline) {
+    return { ids: [], enteredGroupId, editPoints: false }
+  }
+  if (enteredGroupId && !groupIdsOf(polyline).includes(enteredGroupId)) {
+    return selectionAfterDoubleClick(scene, hitId, undefined)
+  }
+
+  const child = childGroupId(polyline, enteredGroupId)
+  if (!child) {
+    return { ids: [hitId], enteredGroupId, editPoints: true }
+  }
+
+  const deeper = childGroupId(polyline, child)
+  if (!deeper) {
+    return { ids: [hitId], enteredGroupId: child, editPoints: false }
+  }
+  return {
+    ids: membersOf(scene, deeper),
+    enteredGroupId: child,
+    editPoints: false,
+  }
+}
+
+export function selectionIsOneGroup(
+  scene: readonly Polyline[],
+  ids: readonly string[],
+): boolean {
+  if (ids.length === 0) {
+    return false
+  }
+
+  const selected = new Set(ids)
+  const polylines = scene.filter((polyline) => selected.has(polyline.id))
+  if (polylines.length !== ids.length) {
+    return false
+  }
+
+  const candidates = new Set(
+    polylines.flatMap((polyline) => groupIdsOf(polyline)),
+  )
+  for (const groupId of candidates) {
+    const members = membersOf(scene, groupId)
+    if (
+      members.length === ids.length &&
+      members.every((id) => selected.has(id))
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+export function groupIdsToRenew(
+  scene: readonly Polyline[],
+  ids: readonly string[],
+  enteredGroupId: string | undefined,
+): readonly string[] {
+  const selected = new Set(ids)
+  const renew: string[] = []
+  for (const polyline of scene) {
+    if (!selected.has(polyline.id)) {
+      continue
+    }
+    for (const groupId of innerGroupIds(polyline, enteredGroupId)) {
+      if (!renew.includes(groupId)) {
+        renew.push(groupId)
+      }
+    }
+  }
+  return renew
+}
+
+export function enteredGroupAfterRemoval(
+  scene: readonly Polyline[],
+  enteredGroupId: string | undefined,
+): string | undefined {
+  if (!enteredGroupId) {
+    return undefined
+  }
+  if (scene.some((polyline) => groupIdsOf(polyline).includes(enteredGroupId))) {
+    return enteredGroupId
+  }
+  return undefined
+}
+
 export function hiddenPolylineIds(
   drag: DragHide | undefined,
 ): readonly string[] {
@@ -498,6 +690,7 @@ function copiedPolylines(
   }
 
   const taken = new Set(scene.map((polyline) => polyline.id))
+  const replacements = groupReplacements(scene, copy)
   return copy.ids.map((id, index) => {
     const newId = copy.newIds[index]
     if (!newId || taken.has(newId)) {
@@ -505,12 +698,49 @@ function copiedPolylines(
     }
 
     taken.add(newId)
-    return copyPolyline(requirePolyline(scene, id), newId, copy.delta)
+    return copyPolyline(
+      requirePolyline(scene, id),
+      newId,
+      copy.delta,
+      replacements,
+      copy.enteredGroupId,
+    )
   })
 }
 
-function copyPolyline(polyline: Polyline, id: string, delta: Point): Polyline {
-  return { ...movePolyline(polyline, delta), id }
+function copyPolyline(
+  polyline: Polyline,
+  id: string,
+  delta: Point,
+  replacements: ReadonlyMap<string, string>,
+  enteredGroupId: string | undefined,
+): Polyline {
+  return withGroupIds(
+    { ...movePolyline(polyline, delta), id },
+    replacedGroupIds(polyline, replacements, enteredGroupId),
+  )
+}
+
+function groupReplacements(
+  scene: readonly Polyline[],
+  copy: PolylineCopy,
+): ReadonlyMap<string, string> {
+  const oldIds = groupIdsToRenew(scene, copy.ids, copy.enteredGroupId)
+  const newGroupIds = copy.newGroupIds ?? []
+  if (oldIds.length !== newGroupIds.length) {
+    throw new Error('Each group copy needs its own id')
+  }
+
+  const pairs: [string, string][] = []
+  for (let index = 0; index < oldIds.length; index += 1) {
+    const oldId = oldIds[index]
+    const newId = newGroupIds[index]
+    if (!oldId || !newId) {
+      throw new Error('Each group copy needs its own id')
+    }
+    pairs.push([oldId, newId])
+  }
+  return new Map(pairs)
 }
 
 function movePolyline(polyline: Polyline, delta: Point): Polyline {
@@ -521,6 +751,185 @@ function movePolyline(polyline: Polyline, delta: Point): Polyline {
       y: point.y + delta.y,
     })),
   }
+}
+
+function alreadyOneGroup(
+  scene: readonly Polyline[],
+  change: PolylineGroup,
+): boolean {
+  if (change.ids.length < 2) {
+    return false
+  }
+
+  const selected = scene.filter((polyline) => change.ids.includes(polyline.id))
+  const first = selected[0]
+  if (!first || selected.length !== change.ids.length) {
+    return false
+  }
+
+  const child = childGroupId(first, change.enteredGroupId)
+  if (!child) {
+    return false
+  }
+  if (
+    !selected.every(
+      (polyline) => childGroupId(polyline, change.enteredGroupId) === child,
+    )
+  ) {
+    return false
+  }
+
+  const members = membersOf(scene, child)
+  return (
+    members.length === change.ids.length &&
+    members.every((id) => change.ids.includes(id))
+  )
+}
+
+function insertedGroupId(
+  groupIds: readonly string[],
+  groupId: string,
+  enteredGroupId: string | undefined,
+): readonly string[] {
+  if (!enteredGroupId) {
+    return [...groupIds, groupId]
+  }
+
+  const index = groupIds.lastIndexOf(enteredGroupId)
+  if (index === -1) {
+    return [...groupIds, groupId]
+  }
+  return [...groupIds.slice(0, index), groupId, ...groupIds.slice(index)]
+}
+
+function groupIdsWithoutOuter(
+  groupIds: readonly string[],
+  enteredGroupId: string | undefined,
+): readonly string[] | undefined {
+  if (!enteredGroupId) {
+    return groupIds.length > 0 ? groupIds.slice(0, -1) : undefined
+  }
+
+  const index = groupIds.lastIndexOf(enteredGroupId)
+  if (index <= 0) {
+    return undefined
+  }
+  return groupIds.filter((_, position) => position !== index - 1)
+}
+
+function unitIds(
+  scene: readonly Polyline[],
+  polyline: Polyline,
+  enteredGroupId: string | undefined,
+): readonly string[] {
+  const child = childGroupId(polyline, enteredGroupId)
+  if (!child) {
+    return [polyline.id]
+  }
+  return membersOf(scene, child)
+}
+
+function childGroupId(
+  polyline: Polyline,
+  enteredGroupId: string | undefined,
+): string | undefined {
+  const groupIds = groupIdsOf(polyline)
+  if (!enteredGroupId) {
+    return groupIds[groupIds.length - 1]
+  }
+
+  const index = groupIds.lastIndexOf(enteredGroupId)
+  if (index <= 0) {
+    return undefined
+  }
+  return groupIds[index - 1]
+}
+
+function membersOf(
+  scene: readonly Polyline[],
+  groupId: string,
+): readonly string[] {
+  return scene
+    .filter((polyline) => groupIdsOf(polyline).includes(groupId))
+    .map((polyline) => polyline.id)
+}
+
+function innerGroupIds(
+  polyline: Polyline,
+  enteredGroupId: string | undefined,
+): readonly string[] {
+  const groupIds = groupIdsOf(polyline)
+  if (!enteredGroupId) {
+    return groupIds
+  }
+
+  const index = groupIds.lastIndexOf(enteredGroupId)
+  if (index === -1) {
+    return groupIds
+  }
+  return groupIds.slice(0, index)
+}
+
+function replacedGroupIds(
+  polyline: Polyline,
+  replacements: ReadonlyMap<string, string>,
+  enteredGroupId: string | undefined,
+): readonly string[] {
+  const groupIds = groupIdsOf(polyline)
+  const keptFrom = enteredGroupId ? groupIds.lastIndexOf(enteredGroupId) : -1
+  return groupIds.map((groupId, index) => {
+    if (keptFrom !== -1 && index >= keptFrom) {
+      return groupId
+    }
+    return requiredReplacement(replacements, groupId)
+  })
+}
+
+function requiredReplacement(
+  replacements: ReadonlyMap<string, string>,
+  groupId: string,
+): string {
+  const next = replacements.get(groupId)
+  if (!next) {
+    throw new Error('Each group copy needs its own id')
+  }
+  return next
+}
+
+function withGroupIds(
+  polyline: Polyline,
+  groupIds: readonly string[],
+): Polyline {
+  if (groupIds.length === 0) {
+    if (!polyline.groupIds) {
+      return polyline
+    }
+    return {
+      id: polyline.id,
+      points: polyline.points,
+      closed: polyline.closed,
+      stroke: polyline.stroke,
+      widthMm: polyline.widthMm,
+    }
+  }
+  if (sameGroupIds(polyline.groupIds, groupIds)) {
+    return polyline
+  }
+  return { ...polyline, groupIds }
+}
+
+function sameGroupIds(
+  left: readonly string[] | undefined,
+  right: readonly string[],
+): boolean {
+  if (!left || left.length !== right.length) {
+    return false
+  }
+  return left.every((groupId, index) => groupId === right[index])
+}
+
+function groupIdsOf(polyline: Polyline): readonly string[] {
+  return polyline.groupIds ?? []
 }
 
 const hitSlopMm = 3
@@ -550,6 +959,28 @@ export type PolylineCopy = {
   ids: readonly string[]
   newIds: readonly string[]
   delta: Point
+  enteredGroupId?: string
+  newGroupIds?: readonly string[]
+}
+
+export type PolylineGroup = {
+  ids: readonly string[]
+  groupId: string
+  enteredGroupId: string | undefined
+}
+
+export type PolylineUngroup = {
+  ids: readonly string[]
+  enteredGroupId: string | undefined
+}
+
+export type GroupSelection = {
+  ids: readonly string[]
+  enteredGroupId: string | undefined
+}
+
+export type DoubleClickSelection = GroupSelection & {
+  editPoints: boolean
 }
 
 export type PointerTarget = {

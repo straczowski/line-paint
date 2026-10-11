@@ -22,7 +22,7 @@ Code only after the user has read the spec and said to proceed. If they correct 
 
 ## Spec shape
 
-Keep it short enough to read in one pass. Name pitfalls against the docs, including scope that belongs in the "Later" list, extra dependencies, and behavior the docs leave open.
+Keep it short enough to read in one pass. Name pitfalls against the docs, including extra dependencies and behavior the docs leave open.
 
 ```markdown
 # NNNN Title
