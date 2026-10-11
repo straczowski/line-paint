@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
 import { gcodeDocument, svgDocument } from '../scene/export'
@@ -6,6 +12,7 @@ import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
 import {
+  deletePolylines,
   enteredGroupAfterRemoval,
   sceneWithoutHiddenPolylines,
 } from '../scene/selection'
@@ -26,7 +33,10 @@ import {
   useGroupShortcut,
   useHeldKey,
   useSelectBackspace,
+  useUndoShortcut,
 } from './commands'
+import { commitDrawing } from './history'
+import type { CommitDrawing, DrawingStep, DrawingUndo } from './history'
 import {
   appendImportedPolylines,
   downloadTextFile,
@@ -74,13 +84,60 @@ export function App() {
   const importToast = useImportToast()
   const gestureRef = useRef<SelectGesture | undefined>(undefined)
   const draftCountRef = useRef(0)
+  const pastRef = useRef<readonly DrawingStep[]>([])
+  const drawingRef = useRef<DrawingStep>({
+    scene,
+    selectedIds,
+    enteredGroupId,
+    pointEdit,
+    duplicateDelta,
+  })
+  useEffect(() => {
+    drawingRef.current = {
+      scene,
+      selectedIds,
+      enteredGroupId,
+      pointEdit,
+      duplicateDelta,
+    }
+  }, [duplicateDelta, enteredGroupId, pointEdit, scene, selectedIds])
+  const commitScene: CommitDrawing = useCallback((nextScene, editor) => {
+    const before = drawingRef.current
+    const sceneAfter =
+      typeof nextScene === 'function' ? nextScene(before.scene) : nextScene
+    const result = commitDrawing(pastRef.current, before, sceneAfter, editor)
+    if (!result.recorded && !editor) {
+      return
+    }
+    if (result.recorded) {
+      pastRef.current = result.past
+      setScene(result.step.scene)
+    }
+    drawingRef.current = result.step
+    if (!editor) {
+      return
+    }
+    setSelectedIds(result.step.selectedIds)
+    setEnteredGroupId(result.step.enteredGroupId)
+    setPointEdit(result.step.pointEdit)
+    setDuplicateDelta(result.step.duplicateDelta)
+  }, [])
+  const applyUndo = useCallback((undone: DrawingUndo) => {
+    pastRef.current = undone.past
+    drawingRef.current = undone.step
+    setScene(undone.step.scene)
+    setSelectedIds(undone.step.selectedIds)
+    setEnteredGroupId(undone.step.enteredGroupId)
+    setPointEdit(undone.step.pointEdit)
+    setDuplicateDelta(undone.step.duplicateDelta)
+  }, [])
   const clearDraft = () => {
     draftCountRef.current = 0
     setDraftPoints([])
     setFollower(undefined)
   }
   const finishDraft = () => {
-    setScene((current) =>
+    commitScene((current) =>
       commitPolyline(current, {
         id: crypto.randomUUID(),
         points: draftPoints,
@@ -140,7 +197,8 @@ export function App() {
     pointEdit,
     gestureRef,
     draftCountRef,
-    setScene,
+    duplicateDelta,
+    commitScene,
     setDraftPoints,
     setFollower,
     setSelectedIds,
@@ -151,48 +209,29 @@ export function App() {
     setShiftHeld,
     setAltHeld,
   })
-  const deleteSelection = () => {
-    if (selectedIds.length === 0) {
+  const deleteSelection = useCallback(() => {
+    const before = drawingRef.current
+    if (before.selectedIds.length === 0) {
       return
     }
 
-    const remaining = scene.filter(
-      (polyline) => !selectedIds.includes(polyline.id),
-    )
-    setScene(remaining)
-    setSelectedIds([])
-    setEnteredGroupId(enteredGroupAfterRemoval(remaining, enteredGroupId))
-    setDuplicateDelta(undefined)
-    setPointEdit(undefined)
+    const remaining = deletePolylines(before.scene, before.selectedIds)
+    commitScene(remaining, {
+      selectedIds: [],
+      enteredGroupId: enteredGroupAfterRemoval(
+        remaining,
+        before.enteredGroupId,
+      ),
+      duplicateDelta: undefined,
+      pointEdit: undefined,
+    })
     gestureRef.current = undefined
     setGesture(undefined)
-  }
-  useSelectBackspace(
-    tool,
-    scene,
-    pointEdit,
-    enteredGroupId,
-    deleteSelection,
-    setScene,
-    setSelectedIds,
-    setEnteredGroupId,
-    setDuplicateDelta,
-    setPointEdit,
-  )
-  useCommandDuplicate(
-    tool,
-    scene,
-    selectedIds,
-    duplicateDelta,
-    enteredGroupId,
-    gestureRef,
-    setScene,
-    setSelectedIds,
-    setDuplicateDelta,
-    setPointEdit,
-    setGesture,
-  )
-  useGroupShortcut(tool, scene, selectedIds, enteredGroupId, setScene)
+  }, [commitScene])
+  useSelectBackspace(tool, drawingRef, deleteSelection, commitScene)
+  useCommandDuplicate(tool, drawingRef, gestureRef, commitScene, setGesture)
+  useUndoShortcut(pastRef, gestureRef, applyUndo)
+  useGroupShortcut(tool, drawingRef, commitScene)
   useFinishOnEnter(finishDraft)
 
   const showHint =
@@ -205,15 +244,16 @@ export function App() {
     }
 
     const id = selectedPolyline.id
-    setScene((current) => setPolylineClosed(current, { id, closed }))
+    commitScene((current) => setPolylineClosed(current, { id, closed }))
   }
 
   const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
-    setScene((current) => appendImportedPolylines(current, polylines))
-    setSelectedIds([])
-    setEnteredGroupId(undefined)
-    setDuplicateDelta(undefined)
-    setPointEdit(undefined)
+    commitScene(appendImportedPolylines(drawingRef.current.scene, polylines), {
+      selectedIds: [],
+      enteredGroupId: undefined,
+      duplicateDelta: undefined,
+      pointEdit: undefined,
+    })
     clearDraft()
     gestureRef.current = undefined
     setGesture(undefined)

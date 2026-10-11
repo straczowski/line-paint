@@ -57,7 +57,10 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Pointer gestures | `src/ui/sheet-pointer.ts` |
 | Draft stroke, selection preview, marquee, and handles | `src/ui/overlay-frame.ts` |
 | Keyboard commands | `src/ui/commands.ts` |
+| Undo snapshots | `src/ui/history.ts` |
 | Toolbar and menu | `src/ui/islands.tsx` |
 | Import, export, and SVG drop | `src/ui/files.ts` |
+
+A scene change is a call to the commit in `src/ui/history.ts`. That module keeps the past snapshots and decides whether the drawing changed. The scene modules stay the math for each edit. A new scene change uses that commit and does not add its own undo path.
 
 Zod is allowed. Use it when data crosses a boundary, such as a file being imported. React state is enough to hold the active tool and to pass the scene into the canvases. No state library, router, or CSS framework unless a spec asks for one. Another library is added only when the user asks for it.

@@ -54,3 +54,13 @@ GCode, same idea as line-weaver's `generateGcode` and `convertToGcodeCommands`:
 ## Import
 
 The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet, as one group.
+
+## Undo
+
+Command+Z undoes the last committed change to the drawing. Key repeat walks back one step at a time. The past keeps the newest 100 steps, and the step older than that is dropped.
+
+A step restores the polylines together with the selection, the entered group, point editing, and the duplicate offset. The active tool, an unfinished draft, and pan and zoom stay where they are.
+
+One step is finishing a polyline, moving, scaling, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, grouping, or ungrouping. A commit that leaves the polylines the same takes no step. Selecting, entering a group, panning, zooming, fitting, switching tools, and exporting take no step.
+
+Command+Z during a pointer gesture does nothing. That gesture becomes one step when the pointer goes up and the drawing changed.

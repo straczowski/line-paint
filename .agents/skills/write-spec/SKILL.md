@@ -41,3 +41,5 @@ Checks that prove the spec is finished.
 ```
 
 One feature per file. Do not rewrite an older spec to smuggle in a second feature. That history is the sequence of files.
+
+A spec that changes the scene names that change as one undo step. The change goes through the commit in `src/ui/history.ts`. Selecting, panning, zooming, fitting, switching tools, and exporting are not scene changes.

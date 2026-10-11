@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import type { Point } from '../scene/polyline'
 import {
   deletePolylinePoint,
   duplicatePolylines,
@@ -11,8 +10,9 @@ import {
   ungroupPolylines,
 } from '../scene/selection'
 import type { PointDelete } from '../scene/selection'
-import type { Scene } from '../scene/sheet'
-import type { PointEdit, SelectGesture, Tool } from './sheet-pointer'
+import { undoDrawing } from './history'
+import type { CommitDrawing, DrawingStep, DrawingUndo } from './history'
+import type { SelectGesture, Tool } from './sheet-pointer'
 
 export function useHeldKey(
   key: string,
@@ -51,15 +51,9 @@ export function useHeldKey(
 
 export function useSelectBackspace(
   tool: Tool,
-  scene: Scene,
-  pointEdit: PointEdit | undefined,
-  enteredGroupId: string | undefined,
+  drawingRef: RefObject<DrawingStep>,
   deleteSelection: () => void,
-  setScene: Dispatch<SetStateAction<Scene>>,
-  setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
-  setEnteredGroupId: Dispatch<SetStateAction<string | undefined>>,
-  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
-  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
+  commitScene: CommitDrawing,
 ): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -71,16 +65,12 @@ export function useSelectBackspace(
       if (event.repeat) {
         return
       }
-      if (pointEdit?.pointIndex !== undefined) {
+      const drawing = drawingRef.current
+      if (drawing.pointEdit?.pointIndex !== undefined) {
         deleteSelectedPoint(
-          scene,
-          { id: pointEdit.id, index: pointEdit.pointIndex },
-          enteredGroupId,
-          setScene,
-          setSelectedIds,
-          setEnteredGroupId,
-          setDuplicateDelta,
-          setPointEdit,
+          drawing,
+          { id: drawing.pointEdit.id, index: drawing.pointEdit.pointIndex },
+          commitScene,
         )
         return
       }
@@ -90,56 +80,16 @@ export function useSelectBackspace(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [
-    deleteSelection,
-    enteredGroupId,
-    pointEdit,
-    scene,
-    setDuplicateDelta,
-    setEnteredGroupId,
-    setPointEdit,
-    setScene,
-    setSelectedIds,
-    tool,
-  ])
+  }, [commitScene, deleteSelection, drawingRef, tool])
 }
 
 export function useCommandDuplicate(
   tool: Tool,
-  scene: Scene,
-  selectedIds: readonly string[],
-  duplicateDelta: Point | undefined,
-  enteredGroupId: string | undefined,
+  drawingRef: RefObject<DrawingStep>,
   gestureRef: RefObject<SelectGesture | undefined>,
-  setScene: Dispatch<SetStateAction<Scene>>,
-  setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
-  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
-  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
+  commitScene: CommitDrawing,
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>,
 ): void {
-  const [latest] = useState(() => {
-    let current = { scene, selectedIds, duplicateDelta, enteredGroupId }
-    return {
-      read() {
-        return current
-      },
-      write(
-        nextScene: Scene,
-        nextIds: readonly string[],
-        nextDelta: Point | undefined,
-        nextEntered: string | undefined,
-      ) {
-        current = {
-          scene: nextScene,
-          selectedIds: nextIds,
-          duplicateDelta: nextDelta,
-          enteredGroupId: nextEntered,
-        }
-      },
-    }
-  })
-  latest.write(scene, selectedIds, duplicateDelta, enteredGroupId)
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isCommandDuplicate(event) || tool !== 'select') {
@@ -147,7 +97,7 @@ export function useCommandDuplicate(
       }
 
       event.preventDefault()
-      const selection = latest.read()
+      const selection = drawingRef.current
       if (event.repeat || selection.selectedIds.length === 0) {
         return
       }
@@ -159,34 +109,55 @@ export function useCommandDuplicate(
         selection.selectedIds,
         selection.enteredGroupId,
       )
-      const nextScene = duplicatePolylines(selection.scene, {
-        ids: selection.selectedIds,
-        newIds,
-        delta,
-        enteredGroupId: selection.enteredGroupId,
-        newGroupIds: oldGroupIds.map(() => crypto.randomUUID()),
-      })
-      latest.write(nextScene, newIds, delta, selection.enteredGroupId)
-      setScene(nextScene)
-      setSelectedIds(newIds)
-      setDuplicateDelta(delta)
-      setPointEdit(undefined)
+      commitScene(
+        duplicatePolylines(selection.scene, {
+          ids: selection.selectedIds,
+          newIds,
+          delta,
+          enteredGroupId: selection.enteredGroupId,
+          newGroupIds: oldGroupIds.map(() => crypto.randomUUID()),
+        }),
+        {
+          selectedIds: newIds,
+          enteredGroupId: selection.enteredGroupId,
+          pointEdit: undefined,
+          duplicateDelta: delta,
+        },
+      )
       gestureRef.current = undefined
       setGesture(undefined)
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [
-    gestureRef,
-    latest,
-    setDuplicateDelta,
-    setGesture,
-    setPointEdit,
-    setScene,
-    setSelectedIds,
-    tool,
-  ])
+  }, [commitScene, drawingRef, gestureRef, setGesture, tool])
+}
+
+export function useUndoShortcut(
+  pastRef: RefObject<readonly DrawingStep[]>,
+  gestureRef: RefObject<SelectGesture | undefined>,
+  applyUndo: (undone: DrawingUndo) => void,
+): void {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isCommandUndo(event)) {
+        return
+      }
+
+      event.preventDefault()
+      const undone = undoCommittedDrawing(
+        pastRef.current,
+        gestureRef.current !== undefined,
+      )
+      if (!undone) {
+        return
+      }
+      applyUndo(undone)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [applyUndo, gestureRef, pastRef])
 }
 
 export function useFinishOnEnter(finishDraft: () => void): void {
@@ -216,32 +187,9 @@ function isPlainBackspace(event: KeyboardEvent): boolean {
 
 export function useGroupShortcut(
   tool: Tool,
-  scene: Scene,
-  selectedIds: readonly string[],
-  enteredGroupId: string | undefined,
-  setScene: Dispatch<SetStateAction<Scene>>,
+  drawingRef: RefObject<DrawingStep>,
+  commitScene: CommitDrawing,
 ): void {
-  const [latest] = useState(() => {
-    let current = { scene, selectedIds, enteredGroupId }
-    return {
-      read() {
-        return current
-      },
-      write(
-        nextScene: Scene,
-        nextIds: readonly string[],
-        nextEntered: string | undefined,
-      ) {
-        current = {
-          scene: nextScene,
-          selectedIds: nextIds,
-          enteredGroupId: nextEntered,
-        }
-      },
-    }
-  })
-  latest.write(scene, selectedIds, enteredGroupId)
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isCommandGroup(event) || tool !== 'select') {
@@ -249,7 +197,7 @@ export function useGroupShortcut(
       }
 
       event.preventDefault()
-      const selection = latest.read()
+      const selection = drawingRef.current
       if (event.repeat || selection.selectedIds.length === 0) {
         return
       }
@@ -264,50 +212,75 @@ export function useGroupShortcut(
             groupId: crypto.randomUUID(),
             enteredGroupId: selection.enteredGroupId,
           })
-      if (next === selection.scene) {
-        return
-      }
-      latest.write(next, selection.selectedIds, selection.enteredGroupId)
-      setScene(next)
+      commitScene(next)
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [latest, setScene, tool])
+  }, [commitScene, drawingRef, tool])
+}
+
+export function undoCommittedDrawing(
+  past: readonly DrawingStep[],
+  gestureActive: boolean,
+): DrawingUndo | undefined {
+  if (gestureActive) {
+    return undefined
+  }
+
+  return undoDrawing(past)
 }
 
 function deleteSelectedPoint(
-  scene: Scene,
+  drawing: DrawingStep,
   target: PointDelete,
-  enteredGroupId: string | undefined,
-  setScene: Dispatch<SetStateAction<Scene>>,
-  setSelectedIds: Dispatch<SetStateAction<readonly string[]>>,
-  setEnteredGroupId: Dispatch<SetStateAction<string | undefined>>,
-  setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>,
-  setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>,
+  commitScene: CommitDrawing,
 ): void {
-  const polyline = scene.find((item) => item.id === target.id)
+  const polyline = drawing.scene.find((item) => item.id === target.id)
   if (!polyline?.points[target.index]) {
     return
   }
 
-  const next = deletePolylinePoint(scene, target)
-  setScene(next)
-  setEnteredGroupId(enteredGroupAfterRemoval(next, enteredGroupId))
+  const next = deletePolylinePoint(drawing.scene, target)
+  const enteredGroupId = enteredGroupAfterRemoval(next, drawing.enteredGroupId)
   if (next.some((item) => item.id === target.id)) {
-    setPointEdit({ id: target.id, pointIndex: undefined })
+    commitScene(next, {
+      selectedIds: drawing.selectedIds,
+      enteredGroupId,
+      pointEdit: { id: target.id, pointIndex: undefined },
+      duplicateDelta: drawing.duplicateDelta,
+    })
     return
   }
 
-  setSelectedIds([])
-  setDuplicateDelta(undefined)
-  setPointEdit(undefined)
+  commitScene(next, {
+    selectedIds: [],
+    enteredGroupId,
+    pointEdit: undefined,
+    duplicateDelta: undefined,
+  })
 }
 
 function isCommandGroup(event: KeyboardEvent): boolean {
   return (
     event.key.toLowerCase() === 'g' &&
     event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  )
+}
+
+export function isCommandUndo(event: {
+  key: string
+  metaKey: boolean
+  shiftKey: boolean
+  ctrlKey: boolean
+  altKey: boolean
+}): boolean {
+  return (
+    event.key.toLowerCase() === 'z' &&
+    event.metaKey &&
+    !event.shiftKey &&
     !event.ctrlKey &&
     !event.altKey
   )

@@ -24,6 +24,7 @@ import {
 import type { ScaleHandle } from '../scene/scale'
 import { canvasPointToScene } from '../scene/sheet'
 import type { Scene, SheetFit } from '../scene/sheet'
+import type { CommitDrawing } from './history'
 
 export function useSheetPointer(input: SheetPointerInput): void {
   const {
@@ -35,9 +36,10 @@ export function useSheetPointer(input: SheetPointerInput): void {
     selectedIds,
     enteredGroupId,
     pointEdit,
+    duplicateDelta,
     gestureRef,
     draftCountRef,
-    setScene,
+    commitScene,
     setDraftPoints,
     setFollower,
     setSelectedIds,
@@ -64,9 +66,10 @@ export function useSheetPointer(input: SheetPointerInput): void {
       selectedIds,
       enteredGroupId,
       pointEdit,
+      duplicateDelta,
       gestureRef,
       draftCountRef,
-      setScene,
+      commitScene,
       setDraftPoints,
       setFollower,
       setSelectedIds,
@@ -109,6 +112,8 @@ export function useSheetPointer(input: SheetPointerInput): void {
     canvasRef,
     draftCountRef,
     gestureRef,
+    commitScene,
+    duplicateDelta,
     enteredGroupId,
     pointEdit,
     scene,
@@ -119,7 +124,6 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setPointEdit,
     setDuplicateDelta,
     setEnteredGroupId,
-    setScene,
     setSelectedIds,
     setAltHeld,
     setShiftHeld,
@@ -242,9 +246,16 @@ function insertEditedPoint(
     return false
   }
 
-  input.setScene(inserted.scene)
-  replaceSelection(input, [editingId])
-  input.setPointEdit({ id: editingId, pointIndex: inserted.index })
+  input.commitScene(inserted.scene, {
+    selectedIds: [editingId],
+    enteredGroupId: input.enteredGroupId,
+    pointEdit: { id: editingId, pointIndex: inserted.index },
+    duplicateDelta: duplicateDeltaAfterSelection(
+      input.duplicateDelta,
+      input.selectedIds,
+      [editingId],
+    ),
+  })
   return true
 }
 
@@ -369,7 +380,7 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     return
   }
   if (gesture.kind === 'scale') {
-    input.setScene((current) =>
+    input.commitScene((current) =>
       scalePolylines(
         current,
         scaleInput(gesture, event.shiftKey, event.altKey, input.zoom),
@@ -382,7 +393,7 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     return
   }
 
-  input.setScene((current) =>
+  input.commitScene((current) =>
     translatePolylines(current, {
       ids: gesture.ids,
       delta: dragDelta({
@@ -411,18 +422,22 @@ function commitDuplicate(
     pointer: gesture.currentScene,
     shiftHeld,
   })
-  input.setScene((current) =>
-    duplicatePolylines(current, {
-      ids: gesture.ids,
-      newIds,
-      delta,
+  input.commitScene(
+    (current) =>
+      duplicatePolylines(current, {
+        ids: gesture.ids,
+        newIds,
+        delta,
+        enteredGroupId: input.enteredGroupId,
+        newGroupIds,
+      }),
+    {
+      selectedIds: newIds,
       enteredGroupId: input.enteredGroupId,
-      newGroupIds,
-    }),
+      pointEdit: undefined,
+      duplicateDelta: delta,
+    },
   )
-  input.setSelectedIds(newIds)
-  input.setDuplicateDelta(delta)
-  input.setPointEdit(undefined)
 }
 
 function replaceSelection(
@@ -474,26 +489,36 @@ function moveEditedPoint(
   gesture: PointGesture,
   shiftHeld: boolean,
 ): void {
-  input.setScene((current) => {
-    const polyline = current.find((item) => item.id === gesture.id)
-    const origin = polyline?.points[gesture.index]
-    if (!polyline || !origin) {
-      return current
-    }
+  input.commitScene(
+    (current) => {
+      const polyline = current.find((item) => item.id === gesture.id)
+      const origin = polyline?.points[gesture.index]
+      if (!polyline || !origin) {
+        return current
+      }
 
-    return movePolylinePoint(current, {
-      id: gesture.id,
-      index: gesture.index,
-      point: draggedHandle({
-        origin,
-        start: gesture.startScene,
-        pointer: gesture.currentScene,
-        shiftHeld,
-      }),
-    })
-  })
-  replaceSelection(input, [gesture.id])
-  input.setPointEdit({ id: gesture.id, pointIndex: gesture.index })
+      return movePolylinePoint(current, {
+        id: gesture.id,
+        index: gesture.index,
+        point: draggedHandle({
+          origin,
+          start: gesture.startScene,
+          pointer: gesture.currentScene,
+          shiftHeld,
+        }),
+      })
+    },
+    {
+      selectedIds: [gesture.id],
+      enteredGroupId: input.enteredGroupId,
+      pointEdit: { id: gesture.id, pointIndex: gesture.index },
+      duplicateDelta: duplicateDeltaAfterSelection(
+        input.duplicateDelta,
+        input.selectedIds,
+        [gesture.id],
+      ),
+    },
+  )
 }
 
 function cancelSheetPointer(
@@ -772,9 +797,10 @@ type SheetPointerInput = {
   selectedIds: readonly string[]
   enteredGroupId: string | undefined
   pointEdit: PointEdit | undefined
+  duplicateDelta: Point | undefined
   gestureRef: RefObject<SelectGesture | undefined>
   draftCountRef: RefObject<number>
-  setScene: Dispatch<SetStateAction<Scene>>
+  commitScene: CommitDrawing
   setDraftPoints: Dispatch<SetStateAction<readonly Point[]>>
   setFollower: Dispatch<SetStateAction<Point | undefined>>
   setSelectedIds: Dispatch<SetStateAction<readonly string[]>>
