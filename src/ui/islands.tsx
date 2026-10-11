@@ -1,4 +1,10 @@
 import {
+  RiAlignItemBottomLine,
+  RiAlignItemHorizontalCenterLine,
+  RiAlignItemLeftLine,
+  RiAlignItemRightLine,
+  RiAlignItemTopLine,
+  RiAlignItemVerticalCenterLine,
   RiCheckLine,
   RiCircleLine,
   RiDeleteBinLine,
@@ -10,6 +16,7 @@ import {
   RiSplitCellsHorizontal,
 } from '@remixicon/react'
 import type { ReactNode } from 'react'
+import type { AlignAction } from '../scene/align'
 import type { Polyline } from '../scene/polyline'
 import type { ImportNotice } from './files'
 import type { Tool } from './sheet-pointer'
@@ -189,11 +196,14 @@ export function SelectIsland({
   polyline,
   showGroup,
   showUngroup,
+  showAlign,
+  distribute,
   onClosed,
   onDuplicate,
   onGroup,
   onUngroup,
   onDelete,
+  onAlign,
 }: SelectIslandProps) {
   return (
     <div className="island property-island" role="group">
@@ -251,7 +261,83 @@ export function SelectIsland({
       >
         <RiDeleteBinLine />
       </button>
+      {showAlign && (
+        <>
+          <AlignButton label="Align left" onPress={() => onAlign('left')}>
+            <RiAlignItemLeftLine />
+          </AlignButton>
+          <AlignButton
+            label="Center horizontally"
+            onPress={() => onAlign('centerX')}
+          >
+            <RiAlignItemHorizontalCenterLine />
+          </AlignButton>
+          <AlignButton label="Align right" onPress={() => onAlign('right')}>
+            <RiAlignItemRightLine />
+          </AlignButton>
+          {distribute && (
+            <AlignButton
+              label="Distribute horizontally"
+              onPress={() => onAlign('distributeX')}
+            >
+              <DistributeHorizontalIcon />
+            </AlignButton>
+          )}
+          <AlignButton label="Align top" onPress={() => onAlign('top')}>
+            <RiAlignItemTopLine />
+          </AlignButton>
+          <AlignButton
+            label="Center vertically"
+            onPress={() => onAlign('centerY')}
+          >
+            <RiAlignItemVerticalCenterLine />
+          </AlignButton>
+          <AlignButton label="Align bottom" onPress={() => onAlign('bottom')}>
+            <RiAlignItemBottomLine />
+          </AlignButton>
+          {distribute && (
+            <AlignButton
+              label="Distribute vertically"
+              onPress={() => onAlign('distributeY')}
+            >
+              <DistributeVerticalIcon />
+            </AlignButton>
+          )}
+        </>
+      )}
     </div>
+  )
+}
+
+function AlignButton({ label, onPress, children }: AlignButtonProps) {
+  return (
+    <button
+      type="button"
+      className="action-button"
+      aria-label={label}
+      onClick={onPress}
+    >
+      {children}
+    </button>
+  )
+}
+
+function DistributeHorizontalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M1.5 2h2v12h-2zM7 2h2v12H7zM12.5 2h2v12h-2z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
+function DistributeVerticalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 1.5h12v2H2zM2 7h12v2H2zM2 12.5h12v2H2z" fill="currentColor" />
+    </svg>
   )
 }
 
@@ -309,15 +395,24 @@ type FinishIslandProps = {
   onFinish: () => void
 }
 
+type AlignButtonProps = {
+  label: string
+  onPress: () => void
+  children: ReactNode
+}
+
 type SelectIslandProps = {
   polyline: Polyline | undefined
   showGroup: boolean
   showUngroup: boolean
+  showAlign: boolean
+  distribute: boolean
   onClosed: (closed: boolean) => void
   onDuplicate: () => void
   onGroup: () => void
   onUngroup: () => void
   onDelete: () => void
+  onAlign: (action: AlignAction) => void
 }
 
 type ChoiceButtonProps = {

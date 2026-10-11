@@ -7,6 +7,8 @@ import {
 } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
+import { alignObjectCount, alignPolylines } from '../scene/align'
+import type { AlignAction } from '../scene/align'
 import { gcodeDocument, svgDocument } from '../scene/export'
 import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
@@ -256,6 +258,17 @@ export function App() {
   const hintCenter = sheetCenterOnCanvas(viewport)
   const selectedPolyline = lonePolyline(scene, selectedIds)
   const groupActions = selectionGroupActions(scene, selectedIds, enteredGroupId)
+  const objectCount = alignObjectCount(scene, selectedIds, enteredGroupId)
+  const alignSelected = (action: AlignAction) => {
+    const drawing = drawingRef.current
+    commitScene((current) =>
+      alignPolylines(current, {
+        ids: drawing.selectedIds,
+        enteredGroupId: drawing.enteredGroupId,
+        action,
+      }),
+    )
+  }
   const closeSelected = (closed: boolean) => {
     if (!selectedPolyline) {
       return
@@ -350,6 +363,9 @@ export function App() {
             onGroup={groupSelected}
             onUngroup={ungroupSelected}
             onDelete={deleteSelection}
+            showAlign={objectCount >= 2}
+            distribute={objectCount >= 3}
+            onAlign={alignSelected}
           />
         )}
       </div>

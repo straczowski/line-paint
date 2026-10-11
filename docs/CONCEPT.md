@@ -35,6 +35,7 @@ When a polyline is selected, the left panel has one toggle: open or closed. Clos
 - Command+G groups the selection. Command+Shift+G ungroups one level. A group can contain a group.
 - A drag that ends while Alt is held duplicates the polyline and leaves the copy where the drag ends. Duplicating a group copies the group.
 - Drag a corner or a side of the selection rectangle to scale the selected polylines. A circle above the top of that rectangle rotates the selected polylines about the center of their points. Shift steps that rotation by 45°. The pointer writes the rotated points, and the rectangle is axis-aligned around them again. The rectangle is dashed when the selection is one group.
+- With two or more objects selected, the selection row shows Align left, Center horizontally, Align right, Align top, Center vertically, and Align bottom. Distribute horizontally and Distribute vertically join that row for three or more objects. A group is one object. Inside an entered group, the selected children are the objects. Align moves each object to the shared selection box. Distribute spaces them across that box.
 
 ## Export
 
@@ -61,6 +62,6 @@ Command+Z undoes the last committed change to the drawing. Key repeat walks back
 
 A step restores the polylines together with the selection, the entered group, point editing, and the duplicate offset. The active tool, an unfinished draft, and pan and zoom stay where they are.
 
-One step is finishing a polyline, moving, scaling, rotating, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, grouping, or ungrouping. A commit that leaves the polylines the same takes no step. Selecting, entering a group, panning, zooming, fitting, switching tools, and exporting take no step.
+One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, grouping, or ungrouping. A commit that leaves the polylines the same takes no step. Selecting, entering a group, panning, zooming, fitting, switching tools, and exporting take no step.
 
 Command+Z during a pointer gesture does nothing. That gesture becomes one step when the pointer goes up and the drawing changed.
