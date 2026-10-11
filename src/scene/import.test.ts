@@ -30,7 +30,7 @@ describe('polylinesFromSvg', () => {
           points: closedPoints,
           closed: true,
           stroke: '#e03131',
-          widthMm: 0.5,
+          widthMm: 0.3,
         },
       ],
     })
@@ -57,7 +57,7 @@ describe('polylinesFromSvg', () => {
           points: [point(0, 142.125), point(297, 67.875)],
           closed: false,
           stroke: '#000000',
-          widthMm: 1.485,
+          widthMm: 0.3,
         },
       ],
     })
@@ -73,7 +73,7 @@ describe('polylinesFromSvg', () => {
           points: [point(122.25, 210), point(174.75, 0)],
           closed: false,
           stroke: '#000000',
-          widthMm: 1.05,
+          widthMm: 0.3,
         },
       ],
     })

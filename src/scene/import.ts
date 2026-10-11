@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { defaultPolylineWidthMm } from './polyline'
 import type { Point } from './polyline'
 import { sheetHeightMm, sheetWidthMm } from './sheet'
 
@@ -90,8 +91,10 @@ function readPath(reader: Reader): FilePath | undefined {
     return
   }
 
-  const width = readPositiveNumber(reader)
-  if (width === undefined || !readLiteral(reader, pathTail)) {
+  if (
+    readPositiveNumber(reader) === undefined ||
+    !readLiteral(reader, pathTail)
+  ) {
     return
   }
 
@@ -100,7 +103,7 @@ function readPath(reader: Reader): FilePath | undefined {
     return
   }
 
-  return { points: polyline.points, closed: polyline.closed, stroke, width }
+  return { points: polyline.points, closed: polyline.closed, stroke }
 }
 
 function readDrawnPoints(reader: Reader): Point[] | undefined {
@@ -146,7 +149,7 @@ function fitPath(path: FilePath, viewBox: ViewBox): ImportedPolyline {
     ),
     closed: path.closed,
     stroke: path.stroke,
-    widthMm: path.width * scale,
+    widthMm: defaultPolylineWidthMm,
   }
 }
 
@@ -317,7 +320,6 @@ type FilePath = {
   points: readonly Point[]
   closed: boolean
   stroke: string
-  width: number
 }
 
 type StoredPoints = {
