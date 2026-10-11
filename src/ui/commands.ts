@@ -97,35 +97,13 @@ export function useCommandDuplicate(
       }
 
       event.preventDefault()
-      const selection = drawingRef.current
-      if (event.repeat || selection.selectedIds.length === 0) {
+      if (event.repeat) {
         return
       }
-
-      const delta = nextDuplicateDelta(selection.duplicateDelta)
-      const newIds = selection.selectedIds.map(() => crypto.randomUUID())
-      const oldGroupIds = groupIdsToRenew(
-        selection.scene,
-        selection.selectedIds,
-        selection.enteredGroupId,
-      )
-      commitScene(
-        duplicatePolylines(selection.scene, {
-          ids: selection.selectedIds,
-          newIds,
-          delta,
-          enteredGroupId: selection.enteredGroupId,
-          newGroupIds: oldGroupIds.map(() => crypto.randomUUID()),
-        }),
-        {
-          selectedIds: newIds,
-          enteredGroupId: selection.enteredGroupId,
-          pointEdit: undefined,
-          duplicateDelta: delta,
-        },
-      )
-      gestureRef.current = undefined
-      setGesture(undefined)
+      if (duplicateSelection(drawingRef.current, commitScene)) {
+        gestureRef.current = undefined
+        setGesture(undefined)
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -176,6 +154,76 @@ export function useFinishOnEnter(finishDraft: () => void): void {
   }, [finishDraft])
 }
 
+export function duplicateSelection(
+  drawing: DrawingStep,
+  commitScene: CommitDrawing,
+): boolean {
+  if (drawing.selectedIds.length === 0) {
+    return false
+  }
+
+  const delta = nextDuplicateDelta(drawing.duplicateDelta)
+  const newIds = drawing.selectedIds.map(() => crypto.randomUUID())
+  const oldGroupIds = groupIdsToRenew(
+    drawing.scene,
+    drawing.selectedIds,
+    drawing.enteredGroupId,
+  )
+  commitScene(
+    duplicatePolylines(drawing.scene, {
+      ids: drawing.selectedIds,
+      newIds,
+      delta,
+      enteredGroupId: drawing.enteredGroupId,
+      newGroupIds: oldGroupIds.map(() => crypto.randomUUID()),
+    }),
+    {
+      selectedIds: newIds,
+      enteredGroupId: drawing.enteredGroupId,
+      pointEdit: undefined,
+      duplicateDelta: delta,
+    },
+  )
+  return true
+}
+
+export function groupSelection(
+  drawing: DrawingStep,
+  commitScene: CommitDrawing,
+  ungroup: boolean,
+): void {
+  if (drawing.selectedIds.length === 0) {
+    return
+  }
+
+  const next = ungroup
+    ? ungroupPolylines(drawing.scene, {
+        ids: drawing.selectedIds,
+        enteredGroupId: drawing.enteredGroupId,
+      })
+    : groupPolylines(drawing.scene, {
+        ids: drawing.selectedIds,
+        groupId: crypto.randomUUID(),
+        enteredGroupId: drawing.enteredGroupId,
+      })
+  commitScene(next)
+}
+
+export function selectionGroupActions(
+  scene: DrawingStep['scene'],
+  selectedIds: readonly string[],
+  enteredGroupId: string | undefined,
+): { group: boolean; ungroup: boolean } {
+  const change = { ids: selectedIds, enteredGroupId }
+  return {
+    group:
+      groupPolylines(scene, { ...change, groupId: offeredGroupId }) !== scene,
+    ungroup: ungroupPolylines(scene, change) !== scene,
+  }
+}
+
+const offeredGroupId = 'offer'
+
 function isPlainBackspace(event: KeyboardEvent): boolean {
   return (
     event.key === 'Backspace' &&
@@ -197,22 +245,10 @@ export function useGroupShortcut(
       }
 
       event.preventDefault()
-      const selection = drawingRef.current
-      if (event.repeat || selection.selectedIds.length === 0) {
+      if (event.repeat) {
         return
       }
-
-      const next = event.shiftKey
-        ? ungroupPolylines(selection.scene, {
-            ids: selection.selectedIds,
-            enteredGroupId: selection.enteredGroupId,
-          })
-        : groupPolylines(selection.scene, {
-            ids: selection.selectedIds,
-            groupId: crypto.randomUUID(),
-            enteredGroupId: selection.enteredGroupId,
-          })
-      commitScene(next)
+      groupSelection(drawingRef.current, commitScene, event.shiftKey)
     }
 
     window.addEventListener('keydown', onKeyDown)

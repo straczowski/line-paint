@@ -119,6 +119,7 @@ body {
 .tool-button svg,
 .finish-button svg,
 .choice-button svg,
+.action-button svg,
 .delete-button svg {
   width: 1rem;
   height: 1rem;
@@ -178,6 +179,7 @@ body {
 }
 
 .choice-button,
+.action-button,
 .delete-button {
   width: 2rem;
   height: 2rem;
@@ -197,6 +199,7 @@ body {
 }
 
 .choice-button:hover:not([aria-pressed='true']),
+.action-button:hover,
 .delete-button:hover {
   background: #f1f0ff;
 }

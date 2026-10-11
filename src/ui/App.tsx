@@ -28,6 +28,9 @@ import {
 } from '../scene/sheet'
 import type { Scene, SheetFit, WindowSize } from '../scene/sheet'
 import {
+  duplicateSelection,
+  groupSelection,
+  selectionGroupActions,
   useCommandDuplicate,
   useFinishOnEnter,
   useGroupShortcut,
@@ -229,6 +232,19 @@ export function App() {
     gestureRef.current = undefined
     setGesture(undefined)
   }, [commitScene])
+  const duplicateSelected = useCallback(() => {
+    if (!duplicateSelection(drawingRef.current, commitScene)) {
+      return
+    }
+    gestureRef.current = undefined
+    setGesture(undefined)
+  }, [commitScene])
+  const groupSelected = useCallback(() => {
+    groupSelection(drawingRef.current, commitScene, false)
+  }, [commitScene])
+  const ungroupSelected = useCallback(() => {
+    groupSelection(drawingRef.current, commitScene, true)
+  }, [commitScene])
   useSelectBackspace(tool, drawingRef, deleteSelection, commitScene)
   useCommandDuplicate(tool, drawingRef, gestureRef, commitScene, setGesture)
   useUndoShortcut(pastRef, gestureRef, applyUndo)
@@ -239,6 +255,7 @@ export function App() {
     tool === 'polyline' && scene.length === 0 && draftPoints.length === 0
   const hintCenter = sheetCenterOnCanvas(viewport)
   const selectedPolyline = lonePolyline(scene, selectedIds)
+  const groupActions = selectionGroupActions(scene, selectedIds, enteredGroupId)
   const closeSelected = (closed: boolean) => {
     if (!selectedPolyline) {
       return
@@ -326,7 +343,12 @@ export function App() {
         {tool === 'select' && selectedIds.length > 0 && (
           <SelectIsland
             polyline={selectedPolyline}
+            showGroup={groupActions.group}
+            showUngroup={groupActions.ungroup}
             onClosed={closeSelected}
+            onDuplicate={duplicateSelected}
+            onGroup={groupSelected}
+            onUngroup={ungroupSelected}
             onDelete={deleteSelection}
           />
         )}

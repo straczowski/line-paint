@@ -2,9 +2,12 @@ import {
   RiCheckLine,
   RiCircleLine,
   RiDeleteBinLine,
+  RiFileCopyLine,
   RiFullscreenLine,
   RiMenuLine,
+  RiMergeCellsHorizontal,
   RiRouteLine,
+  RiSplitCellsHorizontal,
 } from '@remixicon/react'
 import type { ReactNode } from 'react'
 import type { Polyline } from '../scene/polyline'
@@ -184,15 +187,16 @@ export function FinishIsland({ enabled, onFinish }: FinishIslandProps) {
 
 export function SelectIsland({
   polyline,
+  showGroup,
+  showUngroup,
   onClosed,
+  onDuplicate,
+  onGroup,
+  onUngroup,
   onDelete,
 }: SelectIslandProps) {
   return (
-    <div
-      className="island property-island"
-      role="group"
-      aria-label={polyline ? 'Open or closed' : undefined}
-    >
+    <div className="island property-island" role="group">
       {polyline && (
         <>
           <ChoiceButton
@@ -210,6 +214,34 @@ export function SelectIsland({
             <RiCircleLine />
           </ChoiceButton>
         </>
+      )}
+      <button
+        type="button"
+        className="action-button"
+        aria-label="Duplicate"
+        onClick={onDuplicate}
+      >
+        <RiFileCopyLine />
+      </button>
+      {showGroup && (
+        <button
+          type="button"
+          className="action-button"
+          aria-label="Group"
+          onClick={onGroup}
+        >
+          <RiMergeCellsHorizontal />
+        </button>
+      )}
+      {showUngroup && (
+        <button
+          type="button"
+          className="action-button"
+          aria-label="Ungroup"
+          onClick={onUngroup}
+        >
+          <RiSplitCellsHorizontal />
+        </button>
       )}
       <button
         type="button"
@@ -279,7 +311,12 @@ type FinishIslandProps = {
 
 type SelectIslandProps = {
   polyline: Polyline | undefined
+  showGroup: boolean
+  showUngroup: boolean
   onClosed: (closed: boolean) => void
+  onDuplicate: () => void
+  onGroup: () => void
+  onUngroup: () => void
   onDelete: () => void
 }
 
