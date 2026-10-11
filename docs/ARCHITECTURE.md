@@ -47,6 +47,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | --- | --- |
 | Hit-test, move, duplicate, point edit | `src/scene/selection.ts` |
 | Scale math | `src/scene/scale.ts` |
+| Rotate math | `src/scene/rotate.ts` |
 | SVG parse | `src/scene/import.ts` |
 | SVG and GCode text | `src/scene/export.ts` |
 | Shift lock | `src/scene/ruler.ts` |

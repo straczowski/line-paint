@@ -516,6 +516,9 @@ describe('hiddenPolylineIds', () => {
     expect(
       hiddenPolylineIds({ kind: 'scale', ids: ['a', 'b'], altHeld: true }),
     ).toEqual(['a', 'b'])
+    expect(
+      hiddenPolylineIds({ kind: 'rotate', ids: ['a', 'b'], altHeld: true }),
+    ).toEqual(['a', 'b'])
     expect(hiddenPolylineIds(undefined)).toEqual([])
   })
 })

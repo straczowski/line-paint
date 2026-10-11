@@ -73,8 +73,10 @@ describe('selection paint', () => {
         { points: chosen.points, closed: true, widthMm: chosen.widthMm },
       ],
       bounds: undefined,
+      rotatedBounds: undefined,
       dashed: false,
       scaleHandles: false,
+      rotateHandle: undefined,
       marquee: undefined,
       handles: [],
       fit,
@@ -89,8 +91,10 @@ describe('selection paint', () => {
       draftPoints: [],
       preview: [],
       bounds: { minX: 0, maxX: 10, minY: 0, maxY: 10 },
+      rotatedBounds: undefined,
       dashed: true,
       scaleHandles: false,
+      rotateHandle: undefined,
       marquee: undefined,
       handles: [],
       fit,
@@ -102,8 +106,10 @@ describe('selection paint', () => {
       draftPoints: [],
       preview: [],
       bounds: { minX: 0, maxX: 10, minY: 0, maxY: 10 },
+      rotatedBounds: undefined,
       dashed: false,
       scaleHandles: false,
+      rotateHandle: undefined,
       marquee: undefined,
       handles: [],
       fit,
@@ -124,8 +130,10 @@ describe('selection paint', () => {
       draftPoints: [point(1, 2), point(4, 5)],
       preview: [],
       bounds: undefined,
+      rotatedBounds: undefined,
       dashed: false,
       scaleHandles: false,
+      rotateHandle: undefined,
       marquee: undefined,
       handles: [],
       fit,
@@ -133,6 +141,26 @@ describe('selection paint', () => {
     })
 
     expect(draft.strokes).toEqual(['#1e1e1e'])
+
+    const handle = new RecordingPen()
+    paintOverlay({
+      context: handle,
+      draftPoints: [],
+      preview: [],
+      bounds: undefined,
+      rotatedBounds: undefined,
+      dashed: false,
+      scaleHandles: false,
+      rotateHandle: point(5, 18),
+      marquee: undefined,
+      handles: [],
+      fit,
+      size,
+    })
+
+    expect(handle.arcs).toEqual([{ x: 5, y: 192, radius: 4 }])
+    expect(handle.paintedFills).toEqual(['#ffffff'])
+    expect(handle.strokes).toContain('#6965db')
 
     const original = new RecordingPen()
     paintStaticCanvas({
@@ -159,6 +187,8 @@ class RecordingPen {
   readonly strokes: string[] = []
   readonly lines: Point[][] = []
   readonly fills: Fill[] = []
+  readonly arcs: { x: number; y: number; radius: number }[] = []
+  readonly paintedFills: string[] = []
   private current: Point[] = []
 
   fillRect(x: number, y: number, width: number, height: number): void {
@@ -175,8 +205,14 @@ class RecordingPen {
   }
   strokeRect(): void {}
   beginPath(): void {}
-  arc(): void {}
-  fill(): void {}
+  arc(x: number, y: number, radius: number): void {
+    this.arcs.push({ x, y, radius })
+  }
+  fill(): void {
+    if (typeof this.fillStyle === 'string') {
+      this.paintedFills.push(this.fillStyle)
+    }
+  }
 
   moveTo(x: number, y: number): void {
     this.current = [point(x, y)]

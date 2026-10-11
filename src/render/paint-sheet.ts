@@ -3,6 +3,7 @@ import {
   defaultPolylineWidthMm,
 } from '../scene/polyline'
 import type { Point } from '../scene/polyline'
+import { rotateHandleRadiusPx } from '../scene/rotate'
 import { scaleHandleHalfPx } from '../scene/scale'
 import type { SelectionBounds } from '../scene/selection'
 import { sceneYToTop, sheetHeightMm, sheetWidthMm } from '../scene/sheet'
@@ -29,8 +30,10 @@ export function paintOverlay(input: PaintOverlayInput): void {
     draftPoints,
     preview,
     bounds,
+    rotatedBounds,
     dashed,
     scaleHandles,
+    rotateHandle,
     marquee,
     handles,
     fit,
@@ -57,6 +60,12 @@ export function paintOverlay(input: PaintOverlayInput): void {
     if (scaleHandles) {
       paintScaleHandles(context, bounds, fit)
     }
+  }
+  if (rotatedBounds) {
+    strokeRotatedBounds(context, rotatedBounds, fit, dashed)
+  }
+  if (rotateHandle) {
+    paintRotateHandle(context, rotateHandle, fit)
   }
   if (marquee) {
     strokeMarquee(context, { ...marquee, fit })
@@ -123,6 +132,47 @@ function strokeSelectionBounds(
     bottomRight.y - topLeft.y,
   )
   context.setLineDash([])
+}
+
+function strokeRotatedBounds(
+  context: SheetContext,
+  corners: readonly Point[],
+  fit: SheetFit,
+  dashed: boolean,
+): void {
+  const first = corners[0]
+  if (!first) {
+    return
+  }
+
+  context.strokeStyle = selectionColor
+  context.lineWidth = 1
+  context.setLineDash(dashed ? groupDash : [])
+  const start = scenePointToCanvas(first, fit)
+  context.beginPath()
+  context.moveTo(start.x, start.y)
+  for (const corner of corners.slice(1)) {
+    const next = scenePointToCanvas(corner, fit)
+    context.lineTo(next.x, next.y)
+  }
+  context.lineTo(start.x, start.y)
+  context.stroke()
+  context.setLineDash([])
+}
+
+function paintRotateHandle(
+  context: SheetContext,
+  point: Point,
+  fit: SheetFit,
+): void {
+  const center = scenePointToCanvas(point, fit)
+  context.beginPath()
+  context.arc(center.x, center.y, rotateHandleRadiusPx, 0, Math.PI * 2)
+  context.fillStyle = canvasWhite
+  context.strokeStyle = selectionColor
+  context.lineWidth = 1
+  context.fill()
+  context.stroke()
 }
 
 function paintScaleHandles(
@@ -323,8 +373,10 @@ type PaintOverlayInput = {
   draftPoints: readonly Point[]
   preview: readonly SelectionStroke[]
   bounds: SelectionBounds | undefined
+  rotatedBounds: readonly Point[] | undefined
   dashed: boolean
   scaleHandles: boolean
+  rotateHandle: Point | undefined
   marquee: Marquee | undefined
   handles: readonly Handle[]
   fit: SheetFit

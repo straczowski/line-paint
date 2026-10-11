@@ -7,11 +7,18 @@ import {
 } from '../scene/selection'
 import type { DragHide, SelectionBounds } from '../scene/selection'
 import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
+import {
+  rotatedSelection,
+  rotatePolylines,
+  rotationAngle,
+  selectionCenter,
+} from '../scene/rotate'
 import { scalePolylines } from '../scene/scale'
 import type { Scene } from '../scene/sheet'
 import type {
   PointEdit,
   PointGesture,
+  RotateGesture,
   ScaleGesture,
   SelectGesture,
 } from './sheet-pointer'
@@ -26,36 +33,41 @@ export function overlayFrame(
   shiftHeld: boolean,
   altHeld: boolean,
   zoom: number,
+  pixelsPerMm: number,
 ): OverlayFrame {
-  const bounds = selectionFrameBounds(
-    scene,
-    selectedIds,
-    gesture,
-    shiftHeld,
-    altHeld,
-    zoom,
-  )
+  const rotation =
+    gesture?.kind === 'rotate'
+      ? rotationOverlay(scene, gesture, shiftHeld, zoom, pixelsPerMm)
+      : undefined
+  const bounds = rotation
+    ? undefined
+    : selectionFrameBounds(
+        scene,
+        selectedIds,
+        gesture,
+        shiftHeld,
+        altHeld,
+        zoom,
+      )
   return {
     draftPoints: previewStrokePoints(
       draftPoints,
       followerEnd(draftPoints, follower, shiftHeld),
     ),
-    preview: overlayPreview(
-      scene,
-      selectedIds,
-      gesture,
-      shiftHeld,
-      altHeld,
-      zoom,
-    ),
+    preview:
+      rotation?.preview ??
+      overlayPreview(scene, selectedIds, gesture, shiftHeld, altHeld, zoom),
     bounds,
-    dashed: selectionIsOneGroup(scene, bounds ? selectedIds : []),
+    rotatedBounds: rotation?.corners,
+    dashed: selectionIsOneGroup(scene, bounds || rotation ? selectedIds : []),
     marquee:
       gesture?.kind === 'marquee'
         ? { start: gesture.startScene, end: gesture.currentScene }
         : undefined,
     handles: pointHandles(scene, pointEdit, gesture, shiftHeld),
     scaleHandles: pointEdit === undefined && bounds !== undefined,
+    rotateHandle:
+      rotation?.handle ?? restingRotateHandle(bounds, pointEdit, pixelsPerMm),
   }
 }
 
@@ -88,6 +100,9 @@ function dragHide(
   }
   if (gesture?.kind === 'scale') {
     return { kind: 'scale', ids: gesture.ids, altHeld }
+  }
+  if (gesture?.kind === 'rotate') {
+    return { kind: 'rotate', ids: gesture.ids, altHeld }
   }
   if (gesture?.kind === 'move') {
     return { kind: 'move', ids: gesture.ids, altHeld }
@@ -197,6 +212,65 @@ function selectionFrameBounds(
       : polyline.points
   })
   return selectionBounds(points, zoom)
+}
+
+function rotationOverlay(
+  scene: Scene,
+  gesture: RotateGesture,
+  shiftHeld: boolean,
+  zoom: number,
+  pixelsPerMm: number,
+): RotationOverlay | undefined {
+  const points = pointsIn(scene, gesture.ids)
+  const bounds = selectionBounds(points, zoom)
+  const center = selectionCenter(points)
+  if (!bounds || !center) {
+    return undefined
+  }
+
+  const angle = rotationAngle(gesture.angle, shiftHeld)
+  const rotated = rotatePolylines(scene, {
+    ids: gesture.ids,
+    angle: gesture.angle,
+    shiftHeld,
+  })
+  const frame = rotatedSelection(bounds, center, angle, pixelsPerMm)
+  return {
+    preview: rotated.flatMap((polyline) => {
+      if (!gesture.ids.includes(polyline.id)) {
+        return []
+      }
+      return [
+        {
+          points: polyline.points,
+          closed: polyline.closed,
+          widthMm: polyline.widthMm,
+        },
+      ]
+    }),
+    corners: frame.corners,
+    handle: frame.handle,
+  }
+}
+
+function restingRotateHandle(
+  bounds: SelectionBounds | undefined,
+  pointEdit: PointEdit | undefined,
+  pixelsPerMm: number,
+): Point | undefined {
+  if (!bounds || pointEdit || !(pixelsPerMm > 0)) {
+    return undefined
+  }
+
+  return rotatedSelection(bounds, selectionCenterOf(bounds), 0, pixelsPerMm)
+    .handle
+}
+
+function selectionCenterOf(bounds: SelectionBounds): Point {
+  return {
+    x: (bounds.minX + bounds.maxX) / 2,
+    y: (bounds.minY + bounds.maxY) / 2,
+  }
 }
 
 function scalePreview(
@@ -360,10 +434,18 @@ export type OverlayFrame = {
     widthMm: number
   }[]
   bounds: SelectionBounds | undefined
+  rotatedBounds: readonly Point[] | undefined
   dashed: boolean
   marquee: { start: Point; end: Point } | undefined
   handles: readonly { point: Point; selected: boolean }[]
   scaleHandles: boolean
+  rotateHandle: Point | undefined
+}
+
+type RotationOverlay = {
+  preview: OverlayFrame['preview']
+  corners: readonly Point[]
+  handle: Point
 }
 
 type ActiveSelection = {

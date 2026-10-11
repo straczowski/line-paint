@@ -12,6 +12,7 @@ describe('advanceGesture', () => {
     hitId: undefined,
     pointIndex: undefined,
     scaleHandle: undefined,
+    rotateCenter: undefined,
     ...patch,
   })
 
@@ -59,7 +60,18 @@ describe('advanceGesture', () => {
       ['other'],
     )
 
+    const rotate = advanceGesture(
+      press({ rotateCenter: point(5, 0) }),
+      located(point(5, 0), point(5, 10)),
+      ['line', 'other'],
+    )
+
     expect(pointDrag.gesture.kind).toBe('point')
+    expect(rotate.gesture).toMatchObject({
+      kind: 'rotate',
+      ids: ['line', 'other'],
+      center: point(5, 0),
+    })
     expect(scale.gesture).toMatchObject({
       kind: 'scale',
       ids: ['line', 'other'],
@@ -86,6 +98,29 @@ describe('advanceGesture', () => {
     ).toEqual({
       gesture: { ...gesture, currentScene: point(4, 5) },
       selectedIds: ['line'],
+    })
+  })
+
+  it('keeps a rotate drag turning past a half turn', () => {
+    const gesture: SelectGesture = {
+      kind: 'rotate',
+      pointerId: 1,
+      startScene: point(0, 1),
+      currentScene: point(-1, 0),
+      ids: ['line'],
+      center: point(0, 0),
+      angle: (170 * Math.PI) / 180,
+    }
+    const pointer = point(
+      Math.cos((-80 * Math.PI) / 180),
+      Math.sin((-80 * Math.PI) / 180),
+    )
+
+    expect(
+      advanceGesture(gesture, located(point(0, 0), pointer), ['line']).gesture,
+    ).toMatchObject({
+      kind: 'rotate',
+      angle: expect.closeTo((190 * Math.PI) / 180),
     })
   })
 })

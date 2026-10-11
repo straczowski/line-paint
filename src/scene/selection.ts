@@ -1017,7 +1017,7 @@ export type SelectionBounds = {
 }
 
 export type DragHide = {
-  kind: 'move' | 'point' | 'scale'
+  kind: 'move' | 'point' | 'scale' | 'rotate'
   ids: readonly string[]
   altHeld: boolean
 }

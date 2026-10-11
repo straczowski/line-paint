@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Point, Polyline } from '../scene/polyline'
 import { hiddenPolylineKey, overlayFrame } from './overlay-frame'
-import type { MoveGesture, SelectGesture } from './sheet-pointer'
+import type { MoveGesture, RotateGesture, SelectGesture } from './sheet-pointer'
 
 describe('overlayFrame', () => {
   const scene = [stroke('line', [point(0, 0), point(10, 0)])]
@@ -16,6 +16,7 @@ describe('overlayFrame', () => {
       undefined,
       false,
       false,
+      1,
       1,
     )
 
@@ -42,6 +43,7 @@ describe('overlayFrame', () => {
       false,
       false,
       1,
+      1,
     )
 
     expect(frame.preview).toEqual([
@@ -56,6 +58,7 @@ describe('overlayFrame', () => {
       { point: point(14, 1), selected: false },
     ])
     expect(frame.scaleHandles).toBe(false)
+    expect(frame.rotateHandle).toBeUndefined()
     expect(frame.marquee).toBeUndefined()
   })
 
@@ -76,6 +79,7 @@ describe('overlayFrame', () => {
       false,
       false,
       1,
+      1,
     )
 
     expect(frame.marquee).toEqual({
@@ -83,12 +87,84 @@ describe('overlayFrame', () => {
       end: point(3, 3),
     })
     expect(frame.scaleHandles).toBe(true)
+    expect(frame.rotateHandle).toEqual(point(5, 18))
     expect(frame.bounds).toEqual({
       minX: -2,
       maxX: 12,
       minY: -2,
       maxY: 2,
     })
+  })
+
+  it('rotates the preview about the selection center and hides the scale squares', () => {
+    const gesture: RotateGesture = {
+      kind: 'rotate',
+      pointerId: 1,
+      startScene: point(5, 18),
+      currentScene: point(5, 1),
+      ids: ['line'],
+      center: point(5, 0),
+      angle: Math.PI / 2,
+    }
+    const frame = overlayFrame(
+      scene,
+      [],
+      undefined,
+      ['line'],
+      gesture,
+      undefined,
+      false,
+      false,
+      1,
+      1,
+    )
+
+    expect(frame.scaleHandles).toBe(false)
+    expect(frame.bounds).toBeUndefined()
+    expect(frame.preview[0]?.closed).toBe(false)
+    expect(frame.preview[0]?.widthMm).toBe(0.3)
+    expect(frame.preview[0]?.points[0]?.x).toBeCloseTo(5)
+    expect(frame.preview[0]?.points[0]?.y).toBeCloseTo(-5)
+    expect(frame.preview[0]?.points[1]?.x).toBeCloseTo(5)
+    expect(frame.preview[0]?.points[1]?.y).toBeCloseTo(5)
+    expect(frame.rotateHandle?.x).toBeCloseTo(-13)
+    expect(frame.rotateHandle?.y).toBeCloseTo(0)
+    expect(frame.rotatedBounds?.[0]?.x).toBeCloseTo(3)
+    expect(frame.rotatedBounds?.[0]?.y).toBeCloseTo(-7)
+    expect(frame.rotatedBounds?.[1]?.x).toBeCloseTo(3)
+    expect(frame.rotatedBounds?.[1]?.y).toBeCloseTo(7)
+    expect(frame.rotatedBounds?.[2]?.x).toBeCloseTo(7)
+    expect(frame.rotatedBounds?.[2]?.y).toBeCloseTo(7)
+    expect(frame.rotatedBounds?.[3]?.x).toBeCloseTo(7)
+    expect(frame.rotatedBounds?.[3]?.y).toBeCloseTo(-7)
+    expect(hiddenPolylineKey(['line'], gesture, true)).toBe('line')
+  })
+
+  it('snaps the rotating preview when shift is held', () => {
+    const gesture: RotateGesture = {
+      kind: 'rotate',
+      pointerId: 1,
+      startScene: point(6, 0),
+      currentScene: point(6, 1),
+      ids: ['line'],
+      center: point(5, 0),
+      angle: Math.PI / 6,
+    }
+    const frame = overlayFrame(
+      scene,
+      [],
+      undefined,
+      ['line'],
+      gesture,
+      undefined,
+      true,
+      false,
+      1,
+      1,
+    )
+
+    expect(frame.preview[0]?.points[0]?.x).toBeCloseTo(5 - 5 * Math.SQRT1_2)
+    expect(frame.preview[0]?.points[0]?.y).toBeCloseTo(-5 * Math.SQRT1_2)
   })
 })
 
@@ -140,6 +216,7 @@ describe('selection accent', () => {
       false,
       false,
       1,
+      1,
     )
 
     expect(frame.preview).toEqual([
@@ -168,6 +245,7 @@ describe('selection accent', () => {
       undefined,
       false,
       false,
+      1,
       1,
     )
 
@@ -198,6 +276,7 @@ describe('selection accent', () => {
       undefined,
       false,
       true,
+      1,
       1,
     )
 

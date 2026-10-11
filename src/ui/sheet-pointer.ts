@@ -17,6 +17,13 @@ import {
 } from '../scene/selection'
 import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
 import {
+  rotateHandleAt,
+  rotatePolylines,
+  selectionCenter,
+  signedAngle,
+  unwrapAngle,
+} from '../scene/rotate'
+import {
   scaleHandleAt,
   scaleHandleHalfPx,
   scalePolylines,
@@ -166,10 +173,19 @@ function beginSheetPointer(
   if (event.isTrusted) {
     canvas.setPointerCapture(event.pointerId)
   }
-  const scaleHandle = scaleHandleUnderPointer(input, located.scene)
-  const target = scaleHandle
-    ? { id: undefined, pointIndex: undefined }
-    : pointerTarget(input.scene, located.scene, input.pointEdit?.id, input.zoom)
+  const rotateCenter = rotateCenterUnderPointer(input, located.scene)
+  const scaleHandle = rotateCenter
+    ? undefined
+    : scaleHandleUnderPointer(input, located.scene)
+  const target =
+    rotateCenter || scaleHandle
+      ? { id: undefined, pointIndex: undefined }
+      : pointerTarget(
+          input.scene,
+          located.scene,
+          input.pointEdit?.id,
+          input.zoom,
+        )
   const press: SelectGesture = {
     kind: 'press',
     pointerId: event.pointerId,
@@ -178,6 +194,7 @@ function beginSheetPointer(
     hitId: target.id,
     pointIndex: target.pointIndex,
     scaleHandle,
+    rotateCenter,
   }
   input.gestureRef.current = press
   input.setGesture(press)
@@ -388,6 +405,16 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     )
     return
   }
+  if (gesture.kind === 'rotate') {
+    input.commitScene((current) =>
+      rotatePolylines(current, {
+        ids: gesture.ids,
+        angle: gesture.angle,
+        shiftHeld: event.shiftKey,
+      }),
+    )
+    return
+  }
   if (event.altKey && input.pointEdit === undefined) {
     commitDuplicate(input, gesture, event.shiftKey)
     return
@@ -455,7 +482,7 @@ function finishPress(
   input: SheetPointerInput,
   shiftHeld: boolean,
 ): void {
-  if (gesture.scaleHandle) {
+  if (gesture.scaleHandle || gesture.rotateCenter) {
     return
   }
   if (gesture.pointIndex !== undefined && gesture.hitId) {
@@ -541,6 +568,19 @@ export function advanceGesture(
   selectedIds: readonly string[],
   replacementIds?: readonly string[],
 ): GestureAdvance {
+  if (gesture.kind === 'rotate') {
+    return {
+      gesture: {
+        ...gesture,
+        currentScene: located.scene,
+        angle: unwrapAngle(
+          gesture.angle,
+          signedAngle(gesture.center, gesture.startScene, located.scene),
+        ),
+      },
+      selectedIds,
+    }
+  }
   if (
     gesture.kind === 'marquee' ||
     gesture.kind === 'move' ||
@@ -564,6 +604,24 @@ export function advanceGesture(
         currentScene: located.scene,
         id: gesture.hitId,
         index: gesture.pointIndex,
+      },
+      selectedIds,
+    }
+  }
+  if (gesture.rotateCenter && selectedIds.length > 0) {
+    return {
+      gesture: {
+        kind: 'rotate',
+        pointerId: gesture.pointerId,
+        startScene: gesture.startScene,
+        currentScene: located.scene,
+        ids: selectedIds,
+        center: gesture.rotateCenter,
+        angle: signedAngle(
+          gesture.rotateCenter,
+          gesture.startScene,
+          located.scene,
+        ),
       },
       selectedIds,
     }
@@ -665,6 +723,29 @@ function pointsIn(scene: Scene, ids: readonly string[]): readonly Point[] {
   )
 }
 
+function rotateCenterUnderPointer(
+  input: SheetPointerInput,
+  point: Point,
+): Point | undefined {
+  if (input.pointEdit || input.selectedIds.length === 0) {
+    return undefined
+  }
+
+  const pixelsPerMm = input.viewport.scale
+  if (!(pixelsPerMm > 0)) {
+    return undefined
+  }
+
+  const points = pointsIn(input.scene, input.selectedIds)
+  const bounds = selectionBounds(points, input.zoom)
+  const center = selectionCenter(points)
+  if (!bounds || !center || !rotateHandleAt(bounds, point, pixelsPerMm)) {
+    return undefined
+  }
+
+  return center
+}
+
 function scaleHandleUnderPointer(
   input: SheetPointerInput,
   point: Point,
@@ -700,8 +781,21 @@ function placeScaleCursor(
   }
 
   const gesture = input.gestureRef.current
-  if (gesture && gesture.kind !== 'press' && gesture.kind !== 'scale') {
+  if (
+    gesture &&
+    gesture.kind !== 'press' &&
+    gesture.kind !== 'scale' &&
+    gesture.kind !== 'rotate'
+  ) {
     canvas.style.cursor = ''
+    return
+  }
+  if (
+    gesture?.kind === 'rotate' ||
+    ((!gesture || gesture.kind === 'press') &&
+      rotateCenterUnderPointer(input, located.scene))
+  ) {
+    canvas.style.cursor = 'grab'
     return
   }
 
@@ -738,7 +832,12 @@ function noteHeldKey(
 export type Tool = 'select' | 'polyline'
 
 export type SelectGesture =
-  PressGesture | MarqueeGesture | MoveGesture | PointGesture | ScaleGesture
+  | PressGesture
+  | MarqueeGesture
+  | MoveGesture
+  | PointGesture
+  | ScaleGesture
+  | RotateGesture
 
 export type PressGesture = {
   kind: 'press'
@@ -748,6 +847,7 @@ export type PressGesture = {
   hitId: string | undefined
   pointIndex: number | undefined
   scaleHandle: ScaleHandle | undefined
+  rotateCenter: Point | undefined
 }
 
 export type MarqueeGesture = {
@@ -781,6 +881,16 @@ export type ScaleGesture = {
   currentScene: Point
   ids: readonly string[]
   handle: ScaleHandle
+}
+
+export type RotateGesture = {
+  kind: 'rotate'
+  pointerId: number
+  startScene: Point
+  currentScene: Point
+  ids: readonly string[]
+  center: Point
+  angle: number
 }
 
 export type PointEdit = {
