@@ -1,3 +1,5 @@
+import type { Blueprint } from '../scene/blueprint'
+import { blueprintCenter } from '../scene/blueprint'
 import {
   defaultPolylineStroke,
   defaultPolylineWidthMm,
@@ -14,6 +16,7 @@ export function paintStaticCanvas(input: PaintStaticCanvasInput): void {
   matchCanvasSize(context, size)
   clearCanvas(context, size)
   paintSheet(context, fit)
+  paintBlueprints(context, input.images ?? [], fit, input.onBitmap)
   for (const polyline of scene) {
     paintStroke(context, {
       points: pointsWithClosingSegment(polyline.points, polyline.closed),
@@ -41,6 +44,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
   } = input
   matchCanvasSize(context, size)
   clearOverlay(context, size)
+  paintBlueprints(context, input.blueprints ?? [], fit, input.onBitmap)
   paintStroke(context, {
     points: draftPoints,
     fit,
@@ -57,12 +61,14 @@ export function paintOverlay(input: PaintOverlayInput): void {
   }
   if (bounds) {
     strokeSelectionBounds(context, { bounds, fit, dashed })
-    if (scaleHandles) {
-      paintScaleHandles(context, bounds, fit)
-    }
   }
   if (rotatedBounds) {
     strokeRotatedBounds(context, rotatedBounds, fit, dashed)
+  }
+  if (input.scaleHandlePoints) {
+    paintScaleHandlePoints(context, input.scaleHandlePoints, fit)
+  } else if (scaleHandles && bounds) {
+    paintScaleHandles(context, bounds, fit)
   }
   if (rotateHandle) {
     paintRotateHandle(context, rotateHandle, fit)
@@ -175,16 +181,86 @@ function paintRotateHandle(
   context.stroke()
 }
 
+function paintBlueprints(
+  context: SheetContext,
+  images: readonly Blueprint[],
+  fit: SheetFit,
+  onBitmap: (() => void) | undefined,
+): void {
+  if (fit.scale <= 0) {
+    return
+  }
+
+  for (const image of images) {
+    const bitmap = bitmapFor(image.href, onBitmap)
+    if (!bitmap) {
+      continue
+    }
+
+    const center = scenePointToCanvas(blueprintCenter(image), fit)
+    context.save()
+    context.translate(center.x, center.y)
+    context.rotate(-image.rotation)
+    context.drawImage(
+      bitmap,
+      (-image.widthMm * fit.scale) / 2,
+      (-image.heightMm * fit.scale) / 2,
+      image.widthMm * fit.scale,
+      image.heightMm * fit.scale,
+    )
+    context.restore()
+  }
+}
+
+function bitmapFor(
+  href: string,
+  onBitmap: (() => void) | undefined,
+): HTMLImageElement | undefined {
+  const loaded = readyBitmaps.get(href)
+  if (loaded) {
+    return loaded
+  }
+  if (pendingBitmaps.has(href) || typeof Image === 'undefined') {
+    return undefined
+  }
+
+  const image = new Image()
+  pendingBitmaps.add(href)
+  image.onload = () => {
+    pendingBitmaps.delete(href)
+    readyBitmaps.set(href, image)
+    onBitmap?.()
+  }
+  image.src = href
+  if (image.complete && image.naturalWidth > 0) {
+    pendingBitmaps.delete(href)
+    readyBitmaps.set(href, image)
+    return image
+  }
+  return undefined
+}
+
+const readyBitmaps = new Map<string, HTMLImageElement>()
+const pendingBitmaps = new Set<string>()
+
 function paintScaleHandles(
   context: SheetContext,
   bounds: SelectionBounds,
+  fit: SheetFit,
+): void {
+  paintScaleHandlePoints(context, scaleCorners(bounds), fit)
+}
+
+function paintScaleHandlePoints(
+  context: SheetContext,
+  points: readonly Point[],
   fit: SheetFit,
 ): void {
   const side = scaleHandleHalfPx * 2
   context.fillStyle = canvasWhite
   context.strokeStyle = selectionColor
   context.lineWidth = 1
-  for (const corner of scaleCorners(bounds)) {
+  for (const corner of points) {
     const center = scenePointToCanvas(corner, fit)
     const left = center.x - scaleHandleHalfPx
     const top = center.y - scaleHandleHalfPx
@@ -352,6 +428,17 @@ type SheetContext = {
   ): void
   fill(): void
   stroke(): void
+  save(): void
+  restore(): void
+  translate(x: number, y: number): void
+  rotate(angle: number): void
+  drawImage(
+    image: CanvasImageSource,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void
 }
 
 const outsideSheet = '#f1f3f5'
@@ -364,6 +451,8 @@ const minimumStrokePx = 1
 type PaintStaticCanvasInput = {
   context: SheetContext
   scene: Scene
+  images?: readonly Blueprint[]
+  onBitmap?: () => void
   fit: SheetFit
   size: WindowSize
 }
@@ -379,6 +468,9 @@ type PaintOverlayInput = {
   rotateHandle: Point | undefined
   marquee: Marquee | undefined
   handles: readonly Handle[]
+  blueprints?: readonly Blueprint[]
+  scaleHandlePoints?: readonly Point[]
+  onBitmap?: () => void
   fit: SheetFit
   size: WindowSize
 }

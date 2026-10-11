@@ -11,18 +11,14 @@ export function scalePolylines(
   }
 
   const selected = new Set(change.ids)
-  const bounds = tightBounds(
-    scene.flatMap((polyline) =>
-      selected.has(polyline.id) ? polyline.points : [],
-    ),
-    change.zoom,
+  const factors = factorsFor(
+    change.framePoints ??
+      scene.flatMap((polyline) =>
+        selected.has(polyline.id) ? polyline.points : [],
+      ),
+    change,
   )
-  if (!bounds) {
-    return scene
-  }
-
-  const factors = scaleFactors(bounds, change)
-  if (factors.x === 1 && factors.y === 1) {
+  if (!factors) {
     return scene
   }
 
@@ -35,6 +31,45 @@ export function scalePolylines(
     return scalePolyline(polyline, factors)
   })
   return changed ? next : scene
+}
+
+export function factorsFor(
+  points: readonly Point[],
+  change: PolylineScale,
+): ScaleFactors | undefined {
+  const bounds = tightBounds(points, change.zoom)
+  if (!bounds) {
+    return undefined
+  }
+
+  const factors = scaleFactors(bounds, change)
+  if (factors.x === 1 && factors.y === 1) {
+    return undefined
+  }
+  return factors
+}
+
+export function scaleFrame(
+  bounds: SelectionBounds,
+  change: PolylineScale,
+): SelectionBounds | undefined {
+  const factors = scaleFactors(bounds, change)
+  if (factors.x === 1 && factors.y === 1) {
+    return undefined
+  }
+
+  const min = scalePoint({ x: bounds.minX, y: bounds.minY }, factors)
+  const max = scalePoint({ x: bounds.maxX, y: bounds.maxY }, factors)
+  return {
+    minX: Math.min(min.x, max.x),
+    maxX: Math.max(min.x, max.x),
+    minY: Math.min(min.y, max.y),
+    maxY: Math.max(min.y, max.y),
+  }
+}
+
+export function scaledPoint(point: Point, factors: ScaleFactors): Point {
+  return scalePoint(point, factors)
 }
 
 export const scaleHandleHalfPx = 4
@@ -88,7 +123,7 @@ function uniformScale(
     return { anchorX: anchor.x, anchorY: anchor.y, x: 1, y: 1 }
   }
 
-  const implied = impliedCorner(change.pointer, change.handle, change.zoom)
+  const implied = impliedCorner(change)
   const projected =
     ((implied.x - anchor.x) * dx + (implied.y - anchor.y) * dy) / lengthSquared
   const factor = clampedUniformFactor(projected, dx, dy)
@@ -109,7 +144,7 @@ function axisScale(
   const moving = side === 'max' ? max : min
   const anchor = change.altHeld ? (min + max) / 2 : side === 'max' ? min : max
   const pointer = axis === 'x' ? change.pointer.x : change.pointer.y
-  const outset = selectionOutsetAt(change.zoom)
+  const outset = scaleOutset(change)
   const proposed = side === 'max' ? pointer - outset : pointer + outset
   return { anchor, factor: clampedFactor(anchor, moving, proposed) }
 }
@@ -188,18 +223,19 @@ function cornerPoint(
   }
 }
 
-function impliedCorner(
-  pointer: Point,
-  handle: ScaleHandle,
-  zoom: number,
-): Point {
+function impliedCorner(change: PolylineScale): Point {
+  const { pointer, handle } = change
   const xSide = requireEdge(handle, 'x')
   const ySide = requireEdge(handle, 'y')
-  const outset = selectionOutsetAt(zoom)
+  const outset = scaleOutset(change)
   return {
     x: xSide === 'max' ? pointer.x - outset : pointer.x + outset,
     y: ySide === 'max' ? pointer.y - outset : pointer.y + outset,
   }
+}
+
+function scaleOutset(change: PolylineScale): number {
+  return change.outsetMm ?? selectionOutsetAt(change.zoom)
 }
 
 function requireEdge(handle: ScaleHandle, axis: Axis): EdgeSide {
@@ -339,6 +375,8 @@ export type PolylineScale = {
   shiftHeld: boolean
   altHeld: boolean
   zoom: number
+  framePoints?: readonly Point[]
+  outsetMm?: number
 }
 
 export type ScaleHandle =
@@ -351,7 +389,7 @@ export type ScaleHandle =
   | 'southEast'
   | 'southWest'
 
-type ScaleFactors = {
+export type ScaleFactors = {
   anchorX: number
   anchorY: number
   x: number

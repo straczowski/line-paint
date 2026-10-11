@@ -81,6 +81,33 @@ describe('commitDrawing', () => {
     expect(closed.recorded).toBe(true)
     expect(grouped.recorded).toBe(true)
   })
+
+  it('records a blueprint and restores it with the polylines', () => {
+    const current = step([])
+    const image = {
+      id: 'photo',
+      href: 'data:,',
+      x: 1,
+      y: 2,
+      widthMm: 10,
+      heightMm: 8,
+      rotation: 0,
+      locked: false,
+    }
+    const added = commitDrawing([], current, current.scene, undefined, [image])
+    const locked = commitDrawing([], added.step, added.step.scene, undefined, [
+      { ...image, locked: true },
+    ])
+    const undone = undoDrawing(locked.past)
+
+    expect(added.recorded).toBe(true)
+    expect(locked.recorded).toBe(true)
+    expect(undone?.step.images).toEqual([image])
+    expect(
+      commitDrawing([], added.step, added.step.scene, undefined, [image])
+        .recorded,
+    ).toBe(false)
+  })
 })
 
 function step(
@@ -90,6 +117,7 @@ function step(
 ): DrawingStep {
   return {
     scene,
+    images: [],
     selectedIds,
     enteredGroupId: undefined,
     pointEdit: undefined,

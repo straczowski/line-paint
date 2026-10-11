@@ -229,6 +229,11 @@ class RecordingPen {
     this.lines.push(this.current)
     this.current = []
   }
+  save(): void {}
+  restore(): void {}
+  translate(): void {}
+  rotate(): void {}
+  drawImage(): void {}
 }
 
 function stroke(

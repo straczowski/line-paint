@@ -10,6 +10,8 @@ import {
   RiDeleteBinLine,
   RiFileCopyLine,
   RiFullscreenLine,
+  RiLockLine,
+  RiLockUnlockLine,
   RiMenuLine,
   RiMergeCellsHorizontal,
   RiRouteLine,
@@ -28,8 +30,9 @@ export function ImportToast({ notice }: ImportToastProps) {
 
   return (
     <p key={notice.key} className="island import-toast" role="alert">
-      This SVG format is not suitable for line-paint. Only path elements are
-      allowed.
+      {notice.refusal === 'file'
+        ? 'This file cannot be imported.'
+        : 'This SVG format is not suitable for line-paint. Only path elements are allowed.'}
     </p>
   )
 }
@@ -198,12 +201,15 @@ export function SelectIsland({
   showUngroup,
   showAlign,
   distribute,
+  showDuplicate,
+  lock,
   onClosed,
   onDuplicate,
   onGroup,
   onUngroup,
   onDelete,
   onAlign,
+  onLock,
 }: SelectIslandProps) {
   return (
     <div className="island property-island" role="group">
@@ -225,14 +231,16 @@ export function SelectIsland({
           </ChoiceButton>
         </>
       )}
-      <button
-        type="button"
-        className="action-button"
-        aria-label="Duplicate"
-        onClick={onDuplicate}
-      >
-        <RiFileCopyLine />
-      </button>
+      {showDuplicate && (
+        <button
+          type="button"
+          className="action-button"
+          aria-label="Duplicate"
+          onClick={onDuplicate}
+        >
+          <RiFileCopyLine />
+        </button>
+      )}
       {showGroup && (
         <button
           type="button"
@@ -251,6 +259,16 @@ export function SelectIsland({
           onClick={onUngroup}
         >
           <RiSplitCellsHorizontal />
+        </button>
+      )}
+      {lock && (
+        <button
+          type="button"
+          className="action-button"
+          aria-label={lock === 'locked' ? 'Unlock' : 'Lock'}
+          onClick={onLock}
+        >
+          {lock === 'locked' ? <RiLockLine /> : <RiLockUnlockLine />}
         </button>
       )}
       <button
@@ -407,12 +425,15 @@ type SelectIslandProps = {
   showUngroup: boolean
   showAlign: boolean
   distribute: boolean
+  showDuplicate: boolean
   onClosed: (closed: boolean) => void
   onDuplicate: () => void
   onGroup: () => void
   onUngroup: () => void
   onDelete: () => void
   onAlign: (action: AlignAction) => void
+  lock: 'locked' | 'unlocked' | undefined
+  onLock: () => void
 }
 
 type ChoiceButtonProps = {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ImportedPolyline } from '../scene/import'
 import type { Point, Polyline } from '../scene/polyline'
-import { appendImportedPolylines } from './files'
+import { appendImportedPolylines, droppedFileKind } from './files'
 
 describe('appendImportedPolylines', () => {
   it('keeps the polylines already on the sheet and appends the import', () => {
@@ -43,6 +43,25 @@ describe('appendImportedPolylines', () => {
     const kept = line('kept', [point(1, 2), point(3, 4)])
 
     expect(appendImportedPolylines([kept], [])).toEqual([kept])
+  })
+})
+
+describe('droppedFileKind', () => {
+  it('keeps an svg on the polyline path and accepts a picture', () => {
+    expect(
+      droppedFileKind({ type: 'image/svg+xml', name: 'drawing.svg' }),
+    ).toBe('svg')
+    expect(droppedFileKind({ type: '', name: 'drawing.SVG' })).toBe('svg')
+    expect(droppedFileKind({ type: 'image/png', name: 'photo.png' })).toBe(
+      'image',
+    )
+    expect(droppedFileKind({ type: 'image/jpeg', name: 'photo.jpg' })).toBe(
+      'image',
+    )
+    expect(droppedFileKind({ type: '', name: 'photo.WEBP' })).toBe('image')
+    expect(droppedFileKind({ type: 'image/heic', name: 'photo.heic' })).toBe(
+      'refused',
+    )
   })
 })
 

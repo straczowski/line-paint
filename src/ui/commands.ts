@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
+import type { Blueprint } from '../scene/blueprint'
 import {
   deletePolylinePoint,
   duplicatePolylines,
@@ -158,20 +159,23 @@ export function duplicateSelection(
   drawing: DrawingStep,
   commitScene: CommitDrawing,
 ): boolean {
-  if (drawing.selectedIds.length === 0) {
+  const ids = drawing.selectedIds.filter((id) =>
+    drawing.scene.some((polyline) => polyline.id === id),
+  )
+  if (ids.length === 0) {
     return false
   }
 
   const delta = nextDuplicateDelta(drawing.duplicateDelta)
-  const newIds = drawing.selectedIds.map(() => crypto.randomUUID())
+  const newIds = ids.map(() => crypto.randomUUID())
   const oldGroupIds = groupIdsToRenew(
     drawing.scene,
-    drawing.selectedIds,
+    ids,
     drawing.enteredGroupId,
   )
   commitScene(
     duplicatePolylines(drawing.scene, {
-      ids: drawing.selectedIds,
+      ids,
       newIds,
       delta,
       enteredGroupId: drawing.enteredGroupId,
@@ -192,7 +196,12 @@ export function groupSelection(
   commitScene: CommitDrawing,
   ungroup: boolean,
 ): void {
-  if (drawing.selectedIds.length === 0) {
+  if (
+    drawing.selectedIds.length === 0 ||
+    drawing.selectedIds.some((id) =>
+      drawing.images.some((image) => image.id === id),
+    )
+  ) {
     return
   }
 
@@ -213,7 +222,12 @@ export function selectionGroupActions(
   scene: DrawingStep['scene'],
   selectedIds: readonly string[],
   enteredGroupId: string | undefined,
+  images: readonly Blueprint[] = [],
 ): { group: boolean; ungroup: boolean } {
+  if (selectedIds.some((id) => images.some((image) => image.id === id))) {
+    return { group: false, ungroup: false }
+  }
+
   const change = { ids: selectedIds, enteredGroupId }
   return {
     group:

@@ -2,6 +2,21 @@ import { useEffect } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { Point } from '../scene/polyline'
 import {
+  blueprintAt,
+  blueprintCenter,
+  blueprintPoints,
+  blueprintRotateHandleAt,
+  blueprintScaleHandleAt,
+  blueprintsTouching,
+  loneBlueprint,
+  rotateBlueprints,
+  scaleBlueprintFrame,
+  scaleBlueprints,
+  selectionIsFrozen,
+  translateBlueprints,
+} from '../scene/blueprint'
+import type { Blueprint } from '../scene/blueprint'
+import {
   duplicateDeltaAfterSelection,
   duplicatePolylines,
   groupIdsToRenew,
@@ -40,6 +55,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     zoom,
     tool,
     scene,
+    images,
     selectedIds,
     enteredGroupId,
     pointEdit,
@@ -70,6 +86,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
       zoom,
       tool,
       scene,
+      images,
       selectedIds,
       enteredGroupId,
       pointEdit,
@@ -124,6 +141,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     enteredGroupId,
     pointEdit,
     scene,
+    images,
     selectedIds,
     setDraftPoints,
     setFollower,
@@ -180,12 +198,7 @@ function beginSheetPointer(
   const target =
     rotateCenter || scaleHandle
       ? { id: undefined, pointIndex: undefined }
-      : pointerTarget(
-          input.scene,
-          located.scene,
-          input.pointEdit?.id,
-          input.zoom,
-        )
+      : hitTarget(input, located.scene)
   const press: SelectGesture = {
     kind: 'press',
     pointerId: event.pointerId,
@@ -300,15 +313,7 @@ function moveSheetPointer(
   }
 
   const hitId = gesture.kind === 'press' ? gesture.hitId : undefined
-  const replacement = hitId
-    ? selectionAfterClick(
-        input.scene,
-        input.selectedIds,
-        hitId,
-        input.enteredGroupId,
-        false,
-      )
-    : undefined
+  const replacement = hitId ? selectionForHit(input, hitId, false) : undefined
   const next = advanceGesture(
     gesture,
     located,
@@ -378,9 +383,8 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     return
   }
   if (gesture.kind === 'marquee') {
-    replaceSelection(
-      input,
-      selectionAfterMarquee(
+    replaceSelection(input, [
+      ...selectionAfterMarquee(
         input.scene,
         touchedPolylineIds(input.scene, {
           start: gesture.startScene,
@@ -388,7 +392,13 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
         }),
         input.enteredGroupId,
       ),
-    )
+      ...(input.enteredGroupId
+        ? []
+        : blueprintsTouching(input.images, {
+            start: gesture.startScene,
+            end: gesture.currentScene,
+          })),
+    ])
     input.setPointEdit(undefined)
     return
   }
@@ -397,38 +407,69 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
     return
   }
   if (gesture.kind === 'scale') {
-    input.commitScene((current) =>
-      scalePolylines(
-        current,
-        scaleInput(gesture, event.shiftKey, event.altKey, input.zoom),
-      ),
+    const change = scaleInput(gesture, event.shiftKey, event.altKey, input.zoom)
+    const single = loneBlueprint(input.images, gesture.ids)
+    if (single) {
+      input.commitScene(
+        (current) => current,
+        undefined,
+        (images) =>
+          images.map((image) =>
+            image.id === single.id ? scaleBlueprintFrame(image, change) : image,
+          ),
+      )
+      return
+    }
+
+    const framePoints = [
+      ...pointsIn(input.scene, gesture.ids),
+      ...blueprintPoints(input.images, gesture.ids),
+    ]
+    input.commitScene(
+      (current) => scalePolylines(current, { ...change, framePoints }),
+      undefined,
+      (images) => scaleBlueprints(images, { ...change, framePoints }),
     )
     return
   }
   if (gesture.kind === 'rotate') {
-    input.commitScene((current) =>
-      rotatePolylines(current, {
-        ids: gesture.ids,
-        angle: gesture.angle,
-        shiftHeld: event.shiftKey,
-      }),
+    input.commitScene(
+      (current) =>
+        rotatePolylines(current, {
+          ids: gesture.ids,
+          angle: gesture.angle,
+          shiftHeld: event.shiftKey,
+          center: gesture.center,
+        }),
+      undefined,
+      (images) =>
+        rotateBlueprints(images, {
+          ids: gesture.ids,
+          center: gesture.center,
+          angle: gesture.angle,
+          shiftHeld: event.shiftKey,
+        }),
     )
     return
   }
-  if (event.altKey && input.pointEdit === undefined) {
+  if (
+    event.altKey &&
+    input.pointEdit === undefined &&
+    gesture.ids.some((id) => input.scene.some((polyline) => polyline.id === id))
+  ) {
     commitDuplicate(input, gesture, event.shiftKey)
     return
   }
 
-  input.commitScene((current) =>
-    translatePolylines(current, {
-      ids: gesture.ids,
-      delta: dragDelta({
-        start: gesture.startScene,
-        pointer: gesture.currentScene,
-        shiftHeld: event.shiftKey,
-      }),
-    }),
+  const delta = dragDelta({
+    start: gesture.startScene,
+    pointer: gesture.currentScene,
+    shiftHeld: event.shiftKey,
+  })
+  input.commitScene(
+    (current) => translatePolylines(current, { ids: gesture.ids, delta }),
+    undefined,
+    (images) => translateBlueprints(images, { ids: gesture.ids, delta }),
   )
 }
 
@@ -437,12 +478,11 @@ function commitDuplicate(
   gesture: MoveGesture,
   shiftHeld: boolean,
 ): void {
-  const newIds = gesture.ids.map(() => crypto.randomUUID())
-  const oldGroupIds = groupIdsToRenew(
-    input.scene,
-    gesture.ids,
-    input.enteredGroupId,
+  const ids = gesture.ids.filter((id) =>
+    input.scene.some((polyline) => polyline.id === id),
   )
+  const newIds = ids.map(() => crypto.randomUUID())
+  const oldGroupIds = groupIdsToRenew(input.scene, ids, input.enteredGroupId)
   const newGroupIds = oldGroupIds.map(() => crypto.randomUUID())
   const delta = dragDelta({
     start: gesture.startScene,
@@ -452,7 +492,7 @@ function commitDuplicate(
   input.commitScene(
     (current) =>
       duplicatePolylines(current, {
-        ids: gesture.ids,
+        ids,
         newIds,
         delta,
         enteredGroupId: input.enteredGroupId,
@@ -465,6 +505,53 @@ function commitDuplicate(
       duplicateDelta: delta,
     },
   )
+}
+
+function selectionForHit(
+  input: SheetPointerInput,
+  hitId: string,
+  shiftHeld: boolean,
+): { ids: readonly string[]; enteredGroupId: string | undefined } {
+  if (input.images.some((image) => image.id === hitId)) {
+    if (input.enteredGroupId) {
+      return { ids: [hitId], enteredGroupId: undefined }
+    }
+    if (shiftHeld && input.selectedIds.includes(hitId)) {
+      return { ids: input.selectedIds, enteredGroupId: undefined }
+    }
+    if (shiftHeld) {
+      return {
+        ids: [...input.selectedIds, hitId],
+        enteredGroupId: undefined,
+      }
+    }
+    return { ids: [hitId], enteredGroupId: undefined }
+  }
+
+  return selectionAfterClick(
+    input.scene,
+    input.selectedIds,
+    hitId,
+    input.enteredGroupId,
+    shiftHeld,
+  )
+}
+
+function hitTarget(
+  input: SheetPointerInput,
+  point: Point,
+): { id: string | undefined; pointIndex: number | undefined } {
+  const target = pointerTarget(
+    input.scene,
+    point,
+    input.pointEdit?.id,
+    input.zoom,
+  )
+  if (target.id || target.pointIndex !== undefined) {
+    return target
+  }
+
+  return { id: blueprintAt(input.images, point), pointIndex: undefined }
 }
 
 function replaceSelection(
@@ -491,11 +578,9 @@ function finishPress(
     return
   }
   if (gesture.hitId) {
-    const next = selectionAfterClick(
-      input.scene,
-      input.selectedIds,
+    const next = selectionForHit(
+      input,
       gesture.hitId,
-      input.enteredGroupId,
       shiftHeld && input.pointEdit === undefined,
     )
     replaceSelection(input, next.ids)
@@ -736,7 +821,20 @@ function rotateCenterUnderPointer(
     return undefined
   }
 
-  const points = pointsIn(input.scene, input.selectedIds)
+  const single = loneBlueprint(input.images, input.selectedIds)
+  if (single && !single.locked) {
+    return blueprintRotateHandleAt(single, point, pixelsPerMm)
+      ? blueprintCenter(single)
+      : undefined
+  }
+  if (selectionIsFrozen(input.scene, input.images, input.selectedIds)) {
+    return undefined
+  }
+
+  const points = [
+    ...pointsIn(input.scene, input.selectedIds),
+    ...blueprintPoints(input.images, input.selectedIds),
+  ]
   const bounds = selectionBounds(points, input.zoom)
   const center = selectionCenter(points)
   if (!bounds || !center || !rotateHandleAt(bounds, point, pixelsPerMm)) {
@@ -759,8 +857,19 @@ function scaleHandleUnderPointer(
     return undefined
   }
 
+  const single = loneBlueprint(input.images, input.selectedIds)
+  if (single && !single.locked) {
+    return blueprintScaleHandleAt(single, point, scaleHandleHalfPx / fit.scale)
+  }
+  if (selectionIsFrozen(input.scene, input.images, input.selectedIds)) {
+    return undefined
+  }
+
   const bounds = selectionBounds(
-    pointsIn(input.scene, input.selectedIds),
+    [
+      ...pointsIn(input.scene, input.selectedIds),
+      ...blueprintPoints(input.images, input.selectedIds),
+    ],
     input.zoom,
   )
   if (!bounds) {
@@ -904,6 +1013,7 @@ type SheetPointerInput = {
   zoom: number
   tool: Tool
   scene: Scene
+  images: readonly Blueprint[]
   selectedIds: readonly string[]
   enteredGroupId: string | undefined
   pointEdit: PointEdit | undefined

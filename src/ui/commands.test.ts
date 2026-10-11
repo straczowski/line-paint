@@ -26,6 +26,7 @@ describe('Command+Z', () => {
       },
     ],
     selectedIds: ['a'],
+    images: [],
     enteredGroupId: undefined,
     pointEdit: undefined,
     duplicateDelta: undefined,
@@ -202,6 +203,7 @@ function step(
 ): DrawingStep {
   return {
     scene,
+    images: [],
     selectedIds,
     enteredGroupId: undefined,
     pointEdit: undefined,

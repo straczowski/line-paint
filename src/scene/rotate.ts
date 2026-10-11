@@ -15,11 +15,13 @@ export function rotatePolylines(
   }
 
   const selected = new Set(change.ids)
-  const center = selectionCenter(
-    scene.flatMap((polyline) =>
-      selected.has(polyline.id) ? polyline.points : [],
-    ),
-  )
+  const center =
+    change.center ??
+    selectionCenter(
+      scene.flatMap((polyline) =>
+        selected.has(polyline.id) ? polyline.points : [],
+      ),
+    )
   if (!center) {
     return scene
   }
@@ -172,6 +174,7 @@ export type PolylineRotation = {
   ids: readonly string[]
   angle: number
   shiftHeld: boolean
+  center?: Point
 }
 
 export type RotatedSelection = {

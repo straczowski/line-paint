@@ -9,6 +9,12 @@ import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
 import { alignObjectCount, alignPolylines } from '../scene/align'
 import type { AlignAction } from '../scene/align'
+import {
+  deleteBlueprints,
+  imagesWithoutIds,
+  lockBlueprints,
+} from '../scene/blueprint'
+import type { Blueprint } from '../scene/blueprint'
 import { gcodeDocument, svgDocument } from '../scene/export'
 import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
@@ -58,6 +64,7 @@ import {
   ToolIsland,
 } from './islands'
 import {
+  hiddenBlueprintIds,
   hiddenPolylineKey,
   idsInHiddenKey,
   overlayFrame,
@@ -68,6 +75,7 @@ import type { PointEdit, SelectGesture, Tool } from './sheet-pointer'
 
 export function App() {
   const [scene, setScene] = useState<Scene>(emptyScene)
+  const [images, setImages] = useState<readonly Blueprint[]>([])
   const [draftPoints, setDraftPoints] = useState<readonly Point[]>([])
   const [follower, setFollower] = useState<Point>()
   const [tool, setTool] = useState<Tool>('polyline')
@@ -92,6 +100,7 @@ export function App() {
   const pastRef = useRef<readonly DrawingStep[]>([])
   const drawingRef = useRef<DrawingStep>({
     scene,
+    images,
     selectedIds,
     enteredGroupId,
     pointEdit,
@@ -100,37 +109,55 @@ export function App() {
   useEffect(() => {
     drawingRef.current = {
       scene,
+      images,
       selectedIds,
       enteredGroupId,
       pointEdit,
       duplicateDelta,
     }
-  }, [duplicateDelta, enteredGroupId, pointEdit, scene, selectedIds])
-  const commitScene: CommitDrawing = useCallback((nextScene, editor) => {
-    const before = drawingRef.current
-    const sceneAfter =
-      typeof nextScene === 'function' ? nextScene(before.scene) : nextScene
-    const result = commitDrawing(pastRef.current, before, sceneAfter, editor)
-    if (!result.recorded && !editor) {
-      return
-    }
-    if (result.recorded) {
-      pastRef.current = result.past
-      setScene(result.step.scene)
-    }
-    drawingRef.current = result.step
-    if (!editor) {
-      return
-    }
-    setSelectedIds(result.step.selectedIds)
-    setEnteredGroupId(result.step.enteredGroupId)
-    setPointEdit(result.step.pointEdit)
-    setDuplicateDelta(result.step.duplicateDelta)
-  }, [])
+  }, [duplicateDelta, enteredGroupId, images, pointEdit, scene, selectedIds])
+  const commitScene: CommitDrawing = useCallback(
+    (nextScene, editor, nextImages) => {
+      const before = drawingRef.current
+      const sceneAfter =
+        typeof nextScene === 'function' ? nextScene(before.scene) : nextScene
+      const imagesAfter =
+        nextImages === undefined
+          ? before.images
+          : typeof nextImages === 'function'
+            ? nextImages(before.images)
+            : nextImages
+      const result = commitDrawing(
+        pastRef.current,
+        before,
+        sceneAfter,
+        editor,
+        imagesAfter,
+      )
+      if (!result.recorded && !editor) {
+        return
+      }
+      if (result.recorded) {
+        pastRef.current = result.past
+        setScene(result.step.scene)
+        setImages(result.step.images)
+      }
+      drawingRef.current = result.step
+      if (!editor) {
+        return
+      }
+      setSelectedIds(result.step.selectedIds)
+      setEnteredGroupId(result.step.enteredGroupId)
+      setPointEdit(result.step.pointEdit)
+      setDuplicateDelta(result.step.duplicateDelta)
+    },
+    [],
+  )
   const applyUndo = useCallback((undone: DrawingUndo) => {
     pastRef.current = undone.past
     drawingRef.current = undone.step
     setScene(undone.step.scene)
+    setImages(undone.step.images)
     setSelectedIds(undone.step.selectedIds)
     setEnteredGroupId(undone.step.enteredGroupId)
     setPointEdit(undone.step.pointEdit)
@@ -167,12 +194,20 @@ export function App() {
     }
   }
 
+  const [bitmapEpoch, setBitmapEpoch] = useState(0)
+  const noteBitmap = useCallback(() => {
+    setBitmapEpoch((epoch) => epoch + 1)
+  }, [])
+  const shownSelection = tool === 'select' ? selectedIds : []
   useFinishedPicture(
     staticCanvasRef,
     scene,
+    imagesWithoutIds(images, hiddenBlueprintIds(gesture, scene, altHeld)),
     windowSize,
     viewport,
     hiddenPolylineKey(selectedIds, gesture, altHeld),
+    noteBitmap,
+    bitmapEpoch,
   )
   useOverlayPicture(
     overlayCanvasRef,
@@ -180,16 +215,19 @@ export function App() {
       scene,
       draftPoints,
       follower,
-      selectedIds,
+      shownSelection,
       gesture,
       pointEdit,
       shiftHeld,
       altHeld,
       zoom,
       viewport.scale,
+      images,
     ),
     windowSize,
     viewport,
+    noteBitmap,
+    bitmapEpoch,
   )
   useSheetWheel(hostRef, windowSize, setViewport)
   useSheetPointer({
@@ -198,6 +236,7 @@ export function App() {
     zoom,
     tool,
     scene,
+    images,
     selectedIds,
     enteredGroupId,
     pointEdit,
@@ -222,15 +261,20 @@ export function App() {
     }
 
     const remaining = deletePolylines(before.scene, before.selectedIds)
-    commitScene(remaining, {
-      selectedIds: [],
-      enteredGroupId: enteredGroupAfterRemoval(
-        remaining,
-        before.enteredGroupId,
-      ),
-      duplicateDelta: undefined,
-      pointEdit: undefined,
-    })
+    const remainingImages = deleteBlueprints(before.images, before.selectedIds)
+    commitScene(
+      remaining,
+      {
+        selectedIds: [],
+        enteredGroupId: enteredGroupAfterRemoval(
+          remaining,
+          before.enteredGroupId,
+        ),
+        duplicateDelta: undefined,
+        pointEdit: undefined,
+      },
+      remainingImages,
+    )
     gestureRef.current = undefined
     setGesture(undefined)
   }, [commitScene])
@@ -254,10 +298,35 @@ export function App() {
   useFinishOnEnter(finishDraft)
 
   const showHint =
-    tool === 'polyline' && scene.length === 0 && draftPoints.length === 0
+    tool === 'polyline' &&
+    scene.length === 0 &&
+    images.length === 0 &&
+    draftPoints.length === 0
   const hintCenter = sheetCenterOnCanvas(viewport)
   const selectedPolyline = lonePolyline(scene, selectedIds)
-  const groupActions = selectionGroupActions(scene, selectedIds, enteredGroupId)
+  const groupActions = selectionGroupActions(
+    scene,
+    selectedIds,
+    enteredGroupId,
+    images,
+  )
+  const selectedImages = images.filter((image) =>
+    selectedIds.includes(image.id),
+  )
+  const lock =
+    selectedImages.length === 0
+      ? undefined
+      : selectedImages.every((image) => image.locked)
+        ? 'locked'
+        : 'unlocked'
+  const lockSelected = () => {
+    const before = drawingRef.current
+    commitScene(
+      before.scene,
+      undefined,
+      lockBlueprints(before.images, before.selectedIds),
+    )
+  }
   const objectCount = alignObjectCount(scene, selectedIds, enteredGroupId)
   const alignSelected = (action: AlignAction) => {
     const drawing = drawingRef.current
@@ -293,11 +362,30 @@ export function App() {
     }
     importToast.hide()
   }
+  const applyBlueprint = (image: Blueprint) => {
+    const before = drawingRef.current
+    commitScene(
+      before.scene,
+      {
+        selectedIds: [image.id],
+        enteredGroupId: undefined,
+        pointEdit: undefined,
+        duplicateDelta: undefined,
+      },
+      [...before.images, image],
+    )
+    gestureRef.current = undefined
+    setGesture(undefined)
+    importToast.hide()
+  }
   const chooseSvgFile = () => {
     setMenuOpen(false)
     svgInputRef.current?.click()
   }
-  useSvgDrop(applyImportedSvg, importToast.show)
+  useSvgDrop(applyImportedSvg, applyBlueprint, importToast.show, {
+    canvasRef: overlayCanvasRef,
+    fit: viewport,
+  })
 
   return (
     <main ref={hostRef} className="sheet-host">
@@ -365,7 +453,12 @@ export function App() {
             onDelete={deleteSelection}
             showAlign={objectCount >= 2}
             distribute={objectCount >= 3}
+            showDuplicate={scene.some((polyline) =>
+              selectedIds.includes(polyline.id),
+            )}
+            lock={lock}
             onAlign={alignSelected}
+            onLock={lockSelected}
           />
         )}
       </div>
@@ -402,9 +495,12 @@ function readWindowSize(): WindowSize {
 function useFinishedPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   scene: Scene,
+  images: readonly Blueprint[],
   windowSize: WindowSize,
   viewport: SheetFit,
   hiddenKey: string,
+  onBitmap: () => void,
+  bitmapEpoch: number,
 ): void {
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
@@ -414,10 +510,21 @@ function useFinishedPicture(
     paintStaticCanvas({
       context: requireContext(canvasRef.current, 'Static'),
       scene: sceneWithoutHiddenPolylines(scene, idsInHiddenKey(hiddenKey)),
+      images,
+      onBitmap,
       fit: viewport,
       size: windowSize,
     })
-  }, [canvasRef, hiddenKey, scene, viewport, windowSize])
+  }, [
+    bitmapEpoch,
+    canvasRef,
+    hiddenKey,
+    images,
+    onBitmap,
+    scene,
+    viewport,
+    windowSize,
+  ])
 }
 
 function useOverlayPicture(
@@ -425,6 +532,8 @@ function useOverlayPicture(
   frame: OverlayFrame,
   windowSize: WindowSize,
   viewport: SheetFit,
+  onBitmap: () => void,
+  bitmapEpoch: number,
 ): void {
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
@@ -439,13 +548,16 @@ function useOverlayPicture(
       rotatedBounds: frame.rotatedBounds,
       dashed: frame.dashed,
       scaleHandles: frame.scaleHandles,
+      scaleHandlePoints: frame.scaleHandlePoints,
       rotateHandle: frame.rotateHandle,
       marquee: frame.marquee,
       handles: frame.handles,
+      blueprints: frame.blueprints,
+      onBitmap,
       fit: viewport,
       size: windowSize,
     })
-  }, [canvasRef, frame, viewport, windowSize])
+  }, [bitmapEpoch, canvasRef, frame, onBitmap, viewport, windowSize])
 }
 
 function useSheetWheel(

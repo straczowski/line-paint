@@ -27,7 +27,7 @@ SVG and GCode are export formats. They are not the live editor. An SVG DOM gets 
 
 ## Scene
 
-The scene is an ordered list of elements in document coordinates, as in [CONCEPT.md](CONCEPT.md): millimeters, origin at the bottom-left, Y up. A stroke is a sequence of points plus the stroke color and width from [DESIGN.md](DESIGN.md). Pan and zoom belong to the viewport. They change how the canvas is painted. They do not change the points that will be exported.
+The scene is an ordered list of polylines in document coordinates, as in [CONCEPT.md](CONCEPT.md): millimeters, origin at the bottom-left, Y up. A stroke is a sequence of points plus the stroke color and width from [DESIGN.md](DESIGN.md). Blueprint pictures are a second list on the drawing step, not on that polyline list. They paint under every stroke and are absent from export. Pan and zoom belong to the viewport. They change how the canvas is painted. They do not change the points that will be exported.
 
 The canvas origin is the top-left and its Y grows down. Scene coordinates stay bottom-left, Y up. `sceneYToTop` in `src/scene/sheet.ts` converts scene Y onto that top-down axis. `src/render/paint-sheet.ts` and SVG export call it. Landscape GCode copies the scene numbers.
 
@@ -49,6 +49,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Scale math | `src/scene/scale.ts` |
 | Rotate math | `src/scene/rotate.ts` |
 | Align math | `src/scene/align.ts` |
+| Blueprint place, hit, move, scale, rotate, lock, delete | `src/scene/blueprint.ts` |
 | SVG parse | `src/scene/import.ts` |
 | SVG and GCode text | `src/scene/export.ts` |
 | Shift lock | `src/scene/ruler.ts` |
@@ -61,8 +62,8 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Keyboard commands | `src/ui/commands.ts` |
 | Undo snapshots | `src/ui/history.ts` |
 | Toolbar and menu | `src/ui/islands.tsx` |
-| Import, export, and SVG drop | `src/ui/files.ts` |
+| Import, export, SVG drop, and blueprint drop | `src/ui/files.ts` |
 
-A scene change is a call to the commit in `src/ui/history.ts`. That module keeps the past snapshots and decides whether the drawing changed. The scene modules stay the math for each edit. A new scene change uses that commit and does not add its own undo path.
+A scene change is a call to the commit in `src/ui/history.ts`. That module keeps the past snapshots and decides whether the drawing changed. The drawing step holds the polyline scene and the blueprint list. The scene modules stay the math for each edit. A new scene change uses that commit and does not add its own undo path.
 
 Zod is allowed. Use it when data crosses a boundary, such as a file being imported. React state is enough to hold the active tool and to pass the scene into the canvases. No state library, router, or CSS framework unless a spec asks for one. Another library is added only when the user asks for it.

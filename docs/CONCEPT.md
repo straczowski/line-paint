@@ -56,12 +56,20 @@ GCode, same idea as line-weaver's `generateGcode` and `convertToGcodeCommands`:
 
 The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet, as one group. Each imported polyline uses the drawing tool's stroke width.
 
+## Blueprint
+
+A picture dropped on the window is a blueprint under the drawing. PNG, JPEG, GIF, and WebP are accepted. An SVG drop still imports polylines. Any other file is refused and the drawing stays. There is no menu item for a picture.
+
+The picture keeps its pixel aspect. Its longer side starts at 210 mm, and its center is the drop point in scene millimeters. It paints before every polyline. A later picture is above an earlier one and still under every stroke. It is not written to SVG or GCode.
+
+While Select is active, an unlocked picture moves, scales, and rotates with the selection handles. The picture stores that frame, including its angle. When the selection is that one picture, the rectangle stays on the frame. A locked picture does not move, scale, or rotate. The selection island shows one lock button while a picture is selected. Backspace and Delete remove a selected picture, locked or not. A picture is not a group member, and it is not copied or aligned.
+
 ## Undo
 
 Command+Z undoes the last committed change to the drawing. Key repeat walks back one step at a time. The past keeps the newest 100 steps, and the step older than that is dropped.
 
-A step restores the polylines together with the selection, the entered group, point editing, and the duplicate offset. The active tool, an unfinished draft, and pan and zoom stay where they are.
+A step restores the polylines and the blueprints together with the selection, the entered group, point editing, and the duplicate offset. The active tool, an unfinished draft, and pan and zoom stay where they are.
 
-One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, grouping, or ungrouping. A commit that leaves the polylines the same takes no step. Selecting, entering a group, panning, zooming, fitting, switching tools, and exporting take no step.
+One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, dropping a blueprint, locking or unlocking a blueprint, grouping, or ungrouping. A commit that leaves the polylines and the blueprints the same takes no step. Selecting, entering a group, panning, zooming, fitting, switching tools, and exporting take no step.
 
 Command+Z during a pointer gesture does nothing. That gesture becomes one step when the pointer goes up and the drawing changed.

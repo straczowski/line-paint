@@ -1,6 +1,18 @@
 import { previewStrokePoints } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
 import {
+  blueprintCorners,
+  blueprintPoints,
+  blueprintRotateHandle,
+  loneBlueprint,
+  rotateBlueprints,
+  scaleBlueprintFrame,
+  scaleBlueprints,
+  selectionIsFrozen,
+  translateBlueprints,
+} from '../scene/blueprint'
+import type { Blueprint } from '../scene/blueprint'
+import {
   hiddenPolylineIds,
   selectionBounds,
   selectionIsOneGroup,
@@ -34,15 +46,34 @@ export function overlayFrame(
   altHeld: boolean,
   zoom: number,
   pixelsPerMm: number,
+  images: readonly Blueprint[] = [],
 ): OverlayFrame {
+  const single = loneBlueprint(images, selectedIds)
+  if (single) {
+    return singleImageFrame(
+      scene,
+      single,
+      draftPoints,
+      follower,
+      gesture,
+      pointEdit,
+      shiftHeld,
+      altHeld,
+      zoom,
+      pixelsPerMm,
+    )
+  }
+
+  const frozen = selectionIsFrozen(scene, images, selectedIds)
   const rotation =
     gesture?.kind === 'rotate'
-      ? rotationOverlay(scene, gesture, shiftHeld, zoom, pixelsPerMm)
+      ? rotationOverlay(scene, images, gesture, shiftHeld, zoom, pixelsPerMm)
       : undefined
   const bounds = rotation
     ? undefined
     : selectionFrameBounds(
         scene,
+        images,
         selectedIds,
         gesture,
         shiftHeld,
@@ -65,9 +96,15 @@ export function overlayFrame(
         ? { start: gesture.startScene, end: gesture.currentScene }
         : undefined,
     handles: pointHandles(scene, pointEdit, gesture, shiftHeld),
-    scaleHandles: pointEdit === undefined && bounds !== undefined,
-    rotateHandle:
-      rotation?.handle ?? restingRotateHandle(bounds, pointEdit, pixelsPerMm),
+    scaleHandles: !frozen && pointEdit === undefined && bounds !== undefined,
+    scaleHandlePoints: undefined,
+    rotateHandle: frozen
+      ? undefined
+      : (rotation?.handle ??
+        restingRotateHandle(bounds, pointEdit, pixelsPerMm)),
+    blueprints:
+      rotation?.blueprints ??
+      draggedBlueprints(scene, images, gesture, shiftHeld, altHeld, zoom),
   }
 }
 
@@ -82,6 +119,29 @@ export function hiddenPolylineKey(
 
   const dragged = hiddenPolylineIds(dragHide(gesture, altHeld))
   return (dragged.length > 0 ? dragged : selectedIds).join(',')
+}
+
+export function hiddenBlueprintIds(
+  gesture: SelectGesture | undefined,
+  scene: Scene,
+  altHeld: boolean,
+): readonly string[] {
+  if (
+    !gesture ||
+    (gesture.kind !== 'move' &&
+      gesture.kind !== 'scale' &&
+      gesture.kind !== 'rotate')
+  ) {
+    return []
+  }
+  if (
+    gesture.kind === 'move' &&
+    altHeld &&
+    gesture.ids.some((id) => scene.some((polyline) => polyline.id === id))
+  ) {
+    return []
+  }
+  return gesture.ids
 }
 
 export function idsInHiddenKey(hiddenKey: string): readonly string[] {
@@ -183,6 +243,7 @@ function selectionPreview(
 
 function selectionFrameBounds(
   scene: Scene,
+  images: readonly Blueprint[],
   selectedIds: readonly string[],
   gesture: SelectGesture | undefined,
   shiftHeld: boolean,
@@ -190,11 +251,19 @@ function selectionFrameBounds(
   zoom: number,
 ): SelectionBounds | undefined {
   if (gesture?.kind === 'scale') {
+    const framePoints = [
+      ...pointsIn(scene, gesture.ids),
+      ...blueprintPoints(images, gesture.ids),
+    ]
+    const change = {
+      ...scaleInput(gesture, shiftHeld, altHeld, zoom),
+      framePoints,
+    }
     return selectionBounds(
-      pointsIn(
-        scalePolylines(scene, scaleInput(gesture, shiftHeld, altHeld, zoom)),
-        gesture.ids,
-      ),
+      [
+        ...pointsIn(scalePolylines(scene, change), gesture.ids),
+        ...blueprintPoints(scaleBlueprints(images, change), gesture.ids),
+      ],
       zoom,
     )
   }
@@ -211,17 +280,35 @@ function selectionFrameBounds(
       ? translatedPoints(polyline.points, selection.delta)
       : polyline.points
   })
-  return selectionBounds(points, zoom)
+  const pictures = images.flatMap((image) => {
+    if (!selection.ids.includes(image.id)) {
+      return []
+    }
+    const shown =
+      selection.delta && !image.locked
+        ? {
+            ...image,
+            x: image.x + selection.delta.x,
+            y: image.y + selection.delta.y,
+          }
+        : image
+    return blueprintCorners(shown)
+  })
+  return selectionBounds([...points, ...pictures], zoom)
 }
 
 function rotationOverlay(
   scene: Scene,
+  images: readonly Blueprint[],
   gesture: RotateGesture,
   shiftHeld: boolean,
   zoom: number,
   pixelsPerMm: number,
 ): RotationOverlay | undefined {
-  const points = pointsIn(scene, gesture.ids)
+  const points = [
+    ...pointsIn(scene, gesture.ids),
+    ...blueprintPoints(images, gesture.ids),
+  ]
   const bounds = selectionBounds(points, zoom)
   const center = selectionCenter(points)
   if (!bounds || !center) {
@@ -231,6 +318,13 @@ function rotationOverlay(
   const angle = rotationAngle(gesture.angle, shiftHeld)
   const rotated = rotatePolylines(scene, {
     ids: gesture.ids,
+    angle: gesture.angle,
+    shiftHeld,
+    center,
+  })
+  const turned = rotateBlueprints(images, {
+    ids: gesture.ids,
+    center,
     angle: gesture.angle,
     shiftHeld,
   })
@@ -250,6 +344,7 @@ function rotationOverlay(
     }),
     corners: frame.corners,
     handle: frame.handle,
+    blueprints: turned.filter((image) => gesture.ids.includes(image.id)),
   }
 }
 
@@ -426,6 +521,161 @@ function translatedPoint(point: Point, delta: Point): Point {
   }
 }
 
+function singleImageFrame(
+  scene: Scene,
+  image: Blueprint,
+  draftPoints: readonly Point[],
+  follower: Point | undefined,
+  gesture: SelectGesture | undefined,
+  pointEdit: PointEdit | undefined,
+  shiftHeld: boolean,
+  altHeld: boolean,
+  zoom: number,
+  pixelsPerMm: number,
+): OverlayFrame {
+  const shown = shownBlueprint(image, gesture, shiftHeld, altHeld, zoom)
+  const turning = gesture?.kind === 'rotate'
+  return {
+    draftPoints: previewStrokePoints(
+      draftPoints,
+      followerEnd(draftPoints, follower, shiftHeld),
+    ),
+    preview: [],
+    bounds: undefined,
+    rotatedBounds: blueprintCorners(shown),
+    dashed: false,
+    marquee:
+      gesture?.kind === 'marquee'
+        ? { start: gesture.startScene, end: gesture.currentScene }
+        : undefined,
+    handles: pointHandles(scene, pointEdit, gesture, shiftHeld),
+    scaleHandles: false,
+    scaleHandlePoints:
+      shown.locked || turning ? undefined : blueprintCorners(shown),
+    rotateHandle: shown.locked
+      ? undefined
+      : blueprintRotateHandle(shown, pixelsPerMm),
+    blueprints: imageFollowsGesture(scene, shown, gesture, altHeld)
+      ? [shown]
+      : [],
+  }
+}
+
+function shownBlueprint(
+  image: Blueprint,
+  gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
+  altHeld: boolean,
+  zoom: number,
+): Blueprint {
+  if (image.locked || !gesture || !gestureHas(gesture, image.id)) {
+    return image
+  }
+  if (gesture.kind === 'move') {
+    return (
+      translateBlueprints([image], {
+        ids: [image.id],
+        delta: dragDelta({
+          start: gesture.startScene,
+          pointer: gesture.currentScene,
+          shiftHeld,
+        }),
+      })[0] ?? image
+    )
+  }
+  if (gesture.kind === 'scale') {
+    return scaleBlueprintFrame(
+      image,
+      scaleInput(gesture, shiftHeld, altHeld, zoom),
+    )
+  }
+  if (gesture.kind === 'rotate') {
+    return (
+      rotateBlueprints([image], {
+        ids: [image.id],
+        center: gesture.center,
+        angle: gesture.angle,
+        shiftHeld,
+      })[0] ?? image
+    )
+  }
+  return image
+}
+
+function draggedBlueprints(
+  scene: Scene,
+  images: readonly Blueprint[],
+  gesture: SelectGesture | undefined,
+  shiftHeld: boolean,
+  altHeld: boolean,
+  zoom: number,
+): readonly Blueprint[] {
+  if (!gesture || gesture.kind === 'rotate') {
+    return []
+  }
+  if (gesture.kind === 'move') {
+    if (altCopiesPolylines(scene, gesture.ids, altHeld)) {
+      return []
+    }
+    return translateBlueprints(images, {
+      ids: gesture.ids,
+      delta: dragDelta({
+        start: gesture.startScene,
+        pointer: gesture.currentScene,
+        shiftHeld,
+      }),
+    }).filter((image) => gesture.ids.includes(image.id))
+  }
+  if (gesture.kind === 'scale') {
+    const framePoints = [
+      ...pointsIn(scene, gesture.ids),
+      ...blueprintPoints(images, gesture.ids),
+    ]
+    return scaleBlueprints(images, {
+      ...scaleInput(gesture, shiftHeld, altHeld, zoom),
+      framePoints,
+    }).filter((image) => gesture.ids.includes(image.id))
+  }
+  return []
+}
+
+function imageFollowsGesture(
+  scene: Scene,
+  image: Blueprint,
+  gesture: SelectGesture | undefined,
+  altHeld: boolean,
+): boolean {
+  if (!gesture || !gestureHas(gesture, image.id)) {
+    return false
+  }
+  if (gesture.kind === 'scale' || gesture.kind === 'rotate') {
+    return true
+  }
+  if (gesture.kind === 'move') {
+    return !altCopiesPolylines(scene, gesture.ids, altHeld)
+  }
+  return false
+}
+
+function altCopiesPolylines(
+  scene: Scene,
+  ids: readonly string[],
+  altHeld: boolean,
+): boolean {
+  return (
+    altHeld && ids.some((id) => scene.some((polyline) => polyline.id === id))
+  )
+}
+
+function gestureHas(gesture: SelectGesture, id: string): boolean {
+  return (
+    (gesture.kind === 'move' ||
+      gesture.kind === 'scale' ||
+      gesture.kind === 'rotate') &&
+    gesture.ids.includes(id)
+  )
+}
+
 export type OverlayFrame = {
   draftPoints: readonly Point[]
   preview: readonly {
@@ -439,13 +689,16 @@ export type OverlayFrame = {
   marquee: { start: Point; end: Point } | undefined
   handles: readonly { point: Point; selected: boolean }[]
   scaleHandles: boolean
+  scaleHandlePoints: readonly Point[] | undefined
   rotateHandle: Point | undefined
+  blueprints: readonly Blueprint[]
 }
 
 type RotationOverlay = {
   preview: OverlayFrame['preview']
   corners: readonly Point[]
   handle: Point
+  blueprints: readonly Blueprint[]
 }
 
 type ActiveSelection = {
