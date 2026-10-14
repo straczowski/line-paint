@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { gcodeDocument, polylinesForExport, svgDocument } from './export'
+import {
+  gcodeDocument,
+  gcodeFiles,
+  polylinesForExport,
+  svgDocument,
+} from './export'
+import type { Layer } from './layer'
 import type { Point, Polyline } from './polyline'
 
 describe('polylinesForExport', () => {
@@ -190,6 +196,75 @@ describe('gcodeDocument', () => {
       'G0 X51 Y0',
       'G0 X0 Y0',
     ])
+  })
+})
+
+describe('gcodeFiles', () => {
+  it('writes one homing file per layer that has a stroke on the sheet', () => {
+    const layers: readonly Layer[] = [
+      { id: 'empty', name: '???', color: '#1e1e1e' },
+      { id: 'red', name: 'My Red', color: '#e03131' },
+      { id: 'clash', name: 'A/B', color: '#1971c2' },
+      { id: 'default', name: 'Default', color: '#1e1e1e' },
+    ]
+    const scene = [
+      line({
+        id: 'black',
+        points: [point(10, 20), point(30, 40)],
+        layerId: 'default',
+      }),
+      line({
+        id: 'off',
+        points: [point(-1, 0), point(1, 0)],
+        layerId: 'red',
+      }),
+      line({
+        id: 'ink',
+        points: [point(1, 1), point(2, 2)],
+        layerId: 'red',
+        stroke: '#e03131',
+      }),
+      line({
+        id: 'blue',
+        points: [point(4, 4), point(5, 5)],
+        layerId: 'clash',
+      }),
+      line({
+        id: 'marks',
+        points: [point(6, 6), point(7, 7)],
+        layerId: 'empty',
+      }),
+    ]
+    const twin = layers.map((layer) =>
+      layer.id === 'default' ? { ...layer, name: 'AB' } : layer,
+    )
+
+    const files = gcodeFiles(scene, layers)
+    const collided = gcodeFiles(scene, twin)
+    const picture = svgDocument(scene)
+
+    expect(files.map((file) => file.name)).toEqual([
+      'Default.gcode',
+      'AB.gcode',
+      'My-Red.gcode',
+      'layer.gcode',
+    ])
+    expect(files[0]?.text).toContain('G0 X10 Y20')
+    expect(files[0]?.text.endsWith('G0 X0 Y0')).toBe(true)
+    expect(files[2]?.text).toContain('G0 X1 Y1')
+    expect(files[2]?.text).not.toContain('X-1')
+    expect(files.every((file) => file.text.endsWith('G0 X0 Y0'))).toBe(true)
+    expect(gcodeFiles([], layers)).toEqual([])
+    expect(collided.map((file) => file.name)).toEqual([
+      'AB.gcode',
+      'AB-2.gcode',
+      'My-Red.gcode',
+      'layer.gcode',
+    ])
+    expect(picture.match(/<path /g)).toHaveLength(4)
+    expect(picture).toContain('stroke="#e03131"')
+    expect(picture).toContain('stroke="#1e1e1e"')
+    expect(scene).toHaveLength(5)
   })
 })
 

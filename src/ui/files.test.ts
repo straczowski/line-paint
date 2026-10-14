@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ImportedPolyline } from '../scene/import'
+import { defaultLayers } from '../scene/layer'
 import type { Point, Polyline } from '../scene/polyline'
 import { appendImportedPolylines, droppedFileKind } from './files'
 
@@ -12,14 +13,15 @@ describe('appendImportedPolylines', () => {
       widthMm: 0.5,
     })
 
-    const next = appendImportedPolylines([kept], [imported])
+    const next = appendImportedPolylines([kept], [imported], defaultLayers()[0])
 
     expect(next[0]).toBe(kept)
     expect(next).toHaveLength(2)
     expect(next[1]).toMatchObject({
       points: imported.points,
       closed: true,
-      stroke: '#e03131',
+      stroke: '#1e1e1e',
+      layerId: 'default',
       widthMm: 0.5,
     })
     expect(next[1]?.id).not.toBe(kept.id)
@@ -33,6 +35,7 @@ describe('appendImportedPolylines', () => {
         importedLine([point(0, 0), point(1, 0)]),
         importedLine([point(2, 0), point(3, 0)]),
       ],
+      defaultLayers()[0],
     )
 
     expect(next[0]?.groupIds).toEqual(next[1]?.groupIds)
@@ -42,7 +45,9 @@ describe('appendImportedPolylines', () => {
   it('adds nothing when the import has no polylines', () => {
     const kept = line('kept', [point(1, 2), point(3, 4)])
 
-    expect(appendImportedPolylines([kept], [])).toEqual([kept])
+    expect(appendImportedPolylines([kept], [], defaultLayers()[0])).toEqual([
+      kept,
+    ])
   })
 })
 

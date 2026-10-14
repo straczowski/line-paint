@@ -1,3 +1,5 @@
+import type { Layer } from './layer'
+import { polylinesOnLayer } from './layer'
 import type { Point, Polyline } from './polyline'
 import { sceneYToTop, sheetHeightMm, sheetWidthMm } from './sheet'
 import type { Scene } from './sheet'
@@ -10,6 +12,29 @@ export function svgDocument(scene: Scene): string {
 export function gcodeDocument(scene: Scene): string {
   const moves = polylinesForGcode(scene).flatMap(gcodeMoves)
   return [...gcodePreamble(), ...moves, returnToOrigin].join('\n')
+}
+
+export function gcodeFiles(
+  scene: Scene,
+  layers: readonly Layer[],
+): readonly GcodeFile[] {
+  const taken = new Set<string>()
+  const files: GcodeFile[] = []
+  for (let index = layers.length - 1; index >= 0; index -= 1) {
+    const layer = layers[index]
+    if (!layer) {
+      continue
+    }
+    const members = polylinesOnLayer(scene, layer, layers)
+    if (polylinesForExport(members).length === 0) {
+      continue
+    }
+    files.push({
+      name: uniqueGcodeName(layer.name, taken),
+      text: gcodeDocument(members),
+    })
+  }
+  return files
 }
 
 function polylinesForGcode(scene: Scene): readonly ExportPolyline[] {
@@ -180,6 +205,30 @@ function isPointOnSheet(point: Point): boolean {
   )
 }
 
+function uniqueGcodeName(name: string, taken: Set<string>): string {
+  const cleaned = [...name]
+    .filter((character) => keptFileCharacter(character))
+    .join('')
+    .replace(/ /g, '-')
+  const base = cleaned.length > 0 ? cleaned : 'layer'
+  let candidate = base
+  let suffix = 2
+  while (taken.has(candidate.toLowerCase())) {
+    candidate = `${base}-${suffix}`
+    suffix += 1
+  }
+  taken.add(candidate.toLowerCase())
+  return `${candidate}.gcode`
+}
+
+function keptFileCharacter(character: string): boolean {
+  const code = character.codePointAt(0) ?? 0
+  if (code < 32) {
+    return false
+  }
+  return !'\\/:*?"<>|'.includes(character)
+}
+
 function formatMillimeter(value: number): string {
   const rounded = Math.round(value * 100) / 100
   if (Number.isInteger(rounded)) {
@@ -187,6 +236,11 @@ function formatMillimeter(value: number): string {
   }
 
   return rounded.toFixed(2)
+}
+
+export type GcodeFile = {
+  name: string
+  text: string
 }
 
 type ExportPolyline = {

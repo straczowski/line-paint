@@ -14,7 +14,7 @@ The canvas is the product. Controls sit on top of it and stay quiet.
 - Shortcuts may exist. The button still has to make sense without them.
 - Empty canvas: one short hint. No feature list, no account, no collaboration.
 
-Excalidraw’s property sidebar is the ceiling, not the target. Do not add sloppiness, edge styles, fill patterns, layers, or opacity. Those are option overload. Rough, sketchy strokes are also out: plotter marks are smooth lines.
+Excalidraw’s property sidebar is the ceiling, not the target. Do not add sloppiness, edge styles, fill patterns, or opacity. Those are option overload. Layers are the pen list opened from the menu, not a tool and not a sidebar of stroke options. The island stays hidden until Layers is chosen. Rough, sketchy strokes are also out: plotter marks are smooth lines.
 
 ## Chrome
 
@@ -26,6 +26,7 @@ The window outside the sheet is light grey. The sheet is the white page. Control
 - Top left: one menu button. Export and preferences live in that menu, not on the canvas.
 - A property island appears only for the active tool or selection, and only with the few settings that tool needs.
 - Top right: navigation. The zoom percentage, then a fit icon.
+- Middle of the right edge, only while Layers is open: the layer island. It does not sit on the tool row.
 - No Upgrade, Share, library, live collaboration, or sign-in.
 
 Island shadow, from Excalidraw:
@@ -66,7 +67,7 @@ Drawing colors are Excalidraw’s five top picks, Open Color shades. Default str
 | Stroke | `#1e1e1e` | `#e03131` | `#2f9e44` | `#1971c2` | `#f08c00` |
 | Fill, if a fill exists | transparent | `#ffc9c9` | `#b2f2bb` | `#a5d8ff` | `#ffec99` |
 
-Show the stroke row. Keep the fill row hidden until a fill tool exists. Do not show the full Open Color grid.
+Show the stroke row. A layer swatch uses this row. Keep the fill row hidden until a fill tool exists. Do not show the full Open Color grid.
 
 ## Type
 

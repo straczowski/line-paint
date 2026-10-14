@@ -15,7 +15,18 @@ import {
   lockBlueprints,
 } from '../scene/blueprint'
 import type { Blueprint } from '../scene/blueprint'
-import { gcodeDocument, svgDocument } from '../scene/export'
+import { gcodeFiles, svgDocument } from '../scene/export'
+import {
+  addLayer,
+  assignPolylines,
+  defaultLayerId,
+  defaultLayers,
+  deleteLayer,
+  penLayer,
+  renameLayer,
+  recolorLayer,
+  sharedLayerId,
+} from '../scene/layer'
 import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
@@ -59,6 +70,7 @@ import {
 import {
   FinishIsland,
   ImportToast,
+  LayerIsland,
   MenuIsland,
   NavigationIsland,
   SelectIsland,
@@ -82,6 +94,9 @@ export function App() {
   const [follower, setFollower] = useState<Point>()
   const [tool, setTool] = useState<Tool>('polyline')
   const [shapeKind, setShapeKind] = useState<ShapeKind>('rectangle')
+  const [layers, setLayers] = useState(defaultLayers)
+  const [activeLayerId, setActiveLayerId] = useState(defaultLayerId)
+  const [layersOpen, setLayersOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [enteredGroupId, setEnteredGroupId] = useState<string>()
@@ -105,6 +120,7 @@ export function App() {
   const drawingRef = useRef<DrawingStep>({
     scene,
     images,
+    layers,
     selectedIds,
     enteredGroupId,
     pointEdit,
@@ -114,14 +130,23 @@ export function App() {
     drawingRef.current = {
       scene,
       images,
+      layers,
       selectedIds,
       enteredGroupId,
       pointEdit,
       duplicateDelta,
     }
-  }, [duplicateDelta, enteredGroupId, images, pointEdit, scene, selectedIds])
+  }, [
+    duplicateDelta,
+    enteredGroupId,
+    images,
+    layers,
+    pointEdit,
+    scene,
+    selectedIds,
+  ])
   const commitScene: CommitDrawing = useCallback(
-    (nextScene, editor, nextImages) => {
+    (nextScene, editor, nextImages, nextLayers) => {
       const before = drawingRef.current
       const sceneAfter =
         typeof nextScene === 'function' ? nextScene(before.scene) : nextScene
@@ -137,6 +162,7 @@ export function App() {
         sceneAfter,
         editor,
         imagesAfter,
+        nextLayers,
       )
       if (!result.recorded && !editor) {
         return
@@ -145,6 +171,7 @@ export function App() {
         pastRef.current = result.past
         setScene(result.step.scene)
         setImages(result.step.images)
+        setLayers(result.step.layers)
       }
       drawingRef.current = result.step
       if (!editor) {
@@ -162,6 +189,12 @@ export function App() {
     drawingRef.current = undone.step
     setScene(undone.step.scene)
     setImages(undone.step.images)
+    setLayers(undone.step.layers)
+    setActiveLayerId((current) =>
+      undone.step.layers.some((layer) => layer.id === current)
+        ? current
+        : penLayer(undone.step.layers, current).id,
+    )
     setSelectedIds(undone.step.selectedIds)
     setEnteredGroupId(undone.step.enteredGroupId)
     setPointEdit(undone.step.pointEdit)
@@ -172,11 +205,15 @@ export function App() {
     setDraftPoints([])
     setFollower(undefined)
   }
+  const pen = penLayer(layers, activeLayerId)
   const finishDraft = () => {
+    const ink = penLayer(drawingRef.current.layers, activeLayerId)
     commitScene((current) =>
       commitPolyline(current, {
         id: crypto.randomUUID(),
         points: draftPoints,
+        stroke: ink.color,
+        layerId: ink.id,
       }),
     )
     clearDraft()
@@ -232,6 +269,7 @@ export function App() {
     ),
     windowSize,
     viewport,
+    pen.color,
     noteBitmap,
     bitmapEpoch,
   )
@@ -261,6 +299,7 @@ export function App() {
     setAltHeld,
     setCommandHeld,
     shapeKind,
+    pen,
   })
   const deleteSelection = useCallback(() => {
     const before = drawingRef.current
@@ -358,12 +397,20 @@ export function App() {
   }
 
   const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
-    commitScene(appendImportedPolylines(drawingRef.current.scene, polylines), {
-      selectedIds: [],
-      enteredGroupId: undefined,
-      duplicateDelta: undefined,
-      pointEdit: undefined,
-    })
+    const drawing = drawingRef.current
+    commitScene(
+      appendImportedPolylines(
+        drawing.scene,
+        polylines,
+        penLayer(drawing.layers, activeLayerId),
+      ),
+      {
+        selectedIds: [],
+        enteredGroupId: undefined,
+        duplicateDelta: undefined,
+        pointEdit: undefined,
+      },
+    )
     clearDraft()
     gestureRef.current = undefined
     setGesture(undefined)
@@ -388,6 +435,69 @@ export function App() {
     setGesture(undefined)
     importToast.hide()
   }
+  const choosePen = (layerId: string) => {
+    setActiveLayerId(layerId)
+  }
+  const addLayerPen = () => {
+    const id = crypto.randomUUID()
+    const drawing = drawingRef.current
+    commitScene(
+      drawing.scene,
+      undefined,
+      undefined,
+      addLayer(drawing.layers, id),
+    )
+    setActiveLayerId(id)
+  }
+  const renameLayerPen = (layerId: string, name: string) => {
+    const drawing = drawingRef.current
+    const next = renameLayer(drawing.layers, layerId, name)
+    if (next === drawing.layers) {
+      return
+    }
+    commitScene(drawing.scene, undefined, undefined, next)
+  }
+  const recolorLayerPen = (layerId: string, color: string) => {
+    const drawing = drawingRef.current
+    const next = recolorLayer(drawing.layers, drawing.scene, layerId, color)
+    if (next.layers === drawing.layers && next.scene === drawing.scene) {
+      return
+    }
+    commitScene(next.scene, undefined, undefined, next.layers)
+  }
+  const deleteLayerPen = (layerId: string) => {
+    const drawing = drawingRef.current
+    const removed = deleteLayer(drawing.layers, drawing.scene, layerId)
+    if (!removed) {
+      return
+    }
+    commitScene(removed.scene, undefined, undefined, removed.layers)
+    setActiveLayerId((current) =>
+      current === layerId ? removed.receiverId : current,
+    )
+  }
+  const assignSelection = (layerId: string) => {
+    const drawing = drawingRef.current
+    commitScene(
+      assignPolylines(
+        drawing.scene,
+        drawing.selectedIds,
+        drawing.layers,
+        layerId,
+      ),
+    )
+  }
+  const selectedPolylines = scene.some((polyline) =>
+    selectedIds.includes(polyline.id),
+  )
+  const layerAssign =
+    tool === 'select' && selectedPolylines && layers.length > 1
+      ? {
+          layers,
+          sharedLayerId: sharedLayerId(scene, selectedIds, layers),
+          onAssign: assignSelection,
+        }
+      : undefined
   const chooseSvgFile = () => {
     setMenuOpen(false)
     svgInputRef.current?.click()
@@ -430,11 +540,13 @@ export function App() {
           onToggle={() => setMenuOpen((open) => !open)}
           onImportSvg={chooseSvgFile}
           onExportGcode={() => {
-            downloadTextFile(
-              'drawing.gcode',
-              gcodeDocument(scene),
-              'text/plain',
-            )
+            for (const file of gcodeFiles(scene, layers)) {
+              downloadTextFile(file.name, file.text, 'text/plain')
+            }
+            setMenuOpen(false)
+          }}
+          onLayers={() => {
+            setLayersOpen((open) => !open)
             setMenuOpen(false)
           }}
           onExportSvg={() => {
@@ -472,9 +584,21 @@ export function App() {
             lock={lock}
             onAlign={alignSelected}
             onLock={lockSelected}
+            layerAssign={layerAssign}
           />
         )}
       </div>
+      {layersOpen && (
+        <LayerIsland
+          layers={layers}
+          activeLayerId={pen.id}
+          onChoose={choosePen}
+          onAdd={addLayerPen}
+          onRename={renameLayerPen}
+          onRecolor={recolorLayerPen}
+          onDelete={deleteLayerPen}
+        />
+      )}
       <NavigationIsland
         percent={zoomPercent(viewport.scale, fitSheet(windowSize).scale)}
         onResetZoom={() => setViewport((fit) => resetZoom(fit, windowSize))}
@@ -545,6 +669,7 @@ function useOverlayPicture(
   frame: OverlayFrame,
   windowSize: WindowSize,
   viewport: SheetFit,
+  draftColor: string,
   onBitmap: () => void,
   bitmapEpoch: number,
 ): void {
@@ -556,6 +681,7 @@ function useOverlayPicture(
     paintOverlay({
       context: requireContext(canvasRef.current, 'Overlay'),
       draftPoints: frame.draftPoints,
+      draftColor,
       preview: frame.preview,
       bounds: frame.bounds,
       rotatedBounds: frame.rotatedBounds,
@@ -570,7 +696,15 @@ function useOverlayPicture(
       fit: viewport,
       size: windowSize,
     })
-  }, [bitmapEpoch, canvasRef, frame, onBitmap, viewport, windowSize])
+  }, [
+    bitmapEpoch,
+    canvasRef,
+    draftColor,
+    frame,
+    onBitmap,
+    viewport,
+    windowSize,
+  ])
 }
 
 function useSheetWheel(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultLayers } from '../scene/layer'
 import { groupPolylines } from '../scene/selection'
 import type { Polyline } from '../scene/polyline'
 import { commitDrawing } from './history'
@@ -27,6 +28,7 @@ describe('Command+Z', () => {
     ],
     selectedIds: ['a'],
     images: [],
+    layers: defaultLayers(),
     enteredGroupId: undefined,
     pointEdit: undefined,
     duplicateDelta: undefined,
@@ -204,6 +206,7 @@ function step(
   return {
     scene,
     images: [],
+    layers: defaultLayers(),
     selectedIds,
     enteredGroupId: undefined,
     pointEdit: undefined,

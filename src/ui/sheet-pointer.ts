@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
+import type { Layer } from '../scene/layer'
 import { commitPolyline } from '../scene/polyline'
 import type { Point } from '../scene/polyline'
 import { shapePoints } from '../scene/shape'
@@ -77,6 +78,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setAltHeld,
     setCommandHeld,
     shapeKind,
+    pen,
   } = input
 
   useEffect(() => {
@@ -110,6 +112,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
       setAltHeld,
       setCommandHeld,
       shapeKind,
+      pen,
     }
     const onPointerDown = (event: PointerEvent) => {
       beginSheetPointer(canvas, event, sheetPointer)
@@ -161,6 +164,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setShiftHeld,
     setCommandHeld,
     shapeKind,
+    pen,
     tool,
     viewport,
     zoom,
@@ -712,6 +716,8 @@ function finishShape(
       id: crypto.randomUUID(),
       points,
       closed: true,
+      stroke: input.pen.color,
+      layerId: input.pen.id,
     }),
   )
 }
@@ -1125,6 +1131,7 @@ type SheetPointerInput = {
   setAltHeld: Dispatch<SetStateAction<boolean>>
   setCommandHeld: Dispatch<SetStateAction<boolean>>
   shapeKind: ShapeKind
+  pen: Layer
 }
 
 type LocatedPointer = {

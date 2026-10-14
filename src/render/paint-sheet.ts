@@ -48,7 +48,7 @@ export function paintOverlay(input: PaintOverlayInput): void {
   paintStroke(context, {
     points: draftPoints,
     fit,
-    color: defaultPolylineStroke,
+    color: input.draftColor ?? defaultPolylineStroke,
     widthMm: defaultPolylineWidthMm,
   })
   for (const stroke of preview) {
@@ -460,6 +460,7 @@ type PaintStaticCanvasInput = {
 type PaintOverlayInput = {
   context: SheetContext
   draftPoints: readonly Point[]
+  draftColor?: string
   preview: readonly SelectionStroke[]
   bounds: SelectionBounds | undefined
   rotatedBounds: readonly Point[] | undefined

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultLayers } from '../scene/layer'
 import type { Point, Polyline } from '../scene/polyline'
 import type { Scene } from '../scene/sheet'
 import { commitDrawing, undoDrawing } from './history'
@@ -108,6 +109,36 @@ describe('commitDrawing', () => {
         .recorded,
     ).toBe(false)
   })
+
+  it('records a layer rename that leaves the polylines alone', () => {
+    const current = step([])
+    const renamed = current.layers.map((layer) =>
+      layer.id === 'default' ? { ...layer, name: 'Ink' } : layer,
+    )
+    const committed = commitDrawing(
+      [],
+      current,
+      current.scene,
+      undefined,
+      undefined,
+      renamed,
+    )
+    const undone = undoDrawing(committed.past)
+
+    expect(committed.recorded).toBe(true)
+    expect(committed.step.layers[0]?.name).toBe('Ink')
+    expect(undone?.step.layers).toEqual(current.layers)
+    expect(
+      commitDrawing(
+        [],
+        committed.step,
+        committed.step.scene,
+        undefined,
+        undefined,
+        committed.step.layers,
+      ).recorded,
+    ).toBe(false)
+  })
 })
 
 function step(
@@ -118,6 +149,7 @@ function step(
   return {
     scene,
     images: [],
+    layers: defaultLayers(),
     selectedIds,
     enteredGroupId: undefined,
     pointEdit: undefined,

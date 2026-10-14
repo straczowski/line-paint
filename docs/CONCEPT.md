@@ -45,6 +45,16 @@ Pointer up commits one closed polyline. A rectangle is the four corners. An elli
 - Drag a corner or a side of the selection rectangle to scale the selected polylines. A circle above the top of that rectangle rotates the selected polylines about the center of their points. Shift steps that rotation by 45°. The pointer writes the rotated points, and the rectangle is axis-aligned around them again. The rectangle is dashed when the selection is one group.
 - With two or more objects selected, the selection row shows Align left, Center horizontally, Align right, Align top, Center vertically, and Align bottom. Distribute horizontally and Distribute vertically join that row for three or more objects. A group is one object. Inside an entered group, the selected children are the objects. Align moves each object to the shared selection box. Distribute spaces them across that box.
 
+## Layers
+
+A layer is a pen. The drawing always has at least one. The first is named Default and its color is the default stroke, `#1e1e1e`. A new polyline is stored on the active layer and painted in that color.
+
+Layers is a menu item. It opens an island in the middle of the right edge. The list runs newest first. Add layer inserts one above the others. Double-click a name to rename it, at most 12 characters. The swatch sets one of the five stroke colors, and every polyline on that layer takes that color. Clicking a row chooses the pen for the next stroke. It does not move the selection.
+
+While Select is active and the drawing has two or more layers, the select island shows one button per layer. Choosing one puts the selected polylines on that layer, including every member of a group. With one layer those buttons are absent.
+
+Right-click a layer row to delete it. The last layer cannot be deleted. Polylines on a deleted layer join the next layer down. The bottom layer's polylines join the one above, and their strokes take that layer's color.
+
 ## Export
 
 Two buttons: Export SVG and Export GCode. Both read the polylines. Neither scales, pads, nor recenters them. Line-weaver scales pixel art onto a sheet (`scalePolylines` in `src/core/gcode/scale-polylines.ts`). This app must not, because the points are already millimeters.
@@ -60,9 +70,11 @@ GCode, same idea as line-weaver's `generateGcode` and `convertToGcodeCommands`:
 - Command strings for pen up, pen down, feed, and pause stay machine settings, as in line-weaver's `GcodeCommandSettings`
 - Line-weaver also reorders polylines to shorten pen-up travel. That reorder is allowed here. It must not move the points
 
+Export GCode writes one file for each layer that has a polyline on the sheet. The file is named from the layer. Each file homes the pen. Layers with nothing on the sheet are skipped. Export SVG stays one document, and each path uses its polyline stroke.
+
 ## Import
 
-The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet, as one group. Each imported polyline uses the drawing tool's stroke width.
+The menu can import an SVG this app writes, or one line-weaver writes. Any other file is refused and the drawing stays. A successful import adds the file's polylines after the ones already on the sheet, as one group. Each imported polyline uses the drawing tool's stroke width and the active layer's color.
 
 ## Blueprint
 
@@ -76,8 +88,8 @@ While Select is active, an unlocked picture moves, scales, and rotates with the 
 
 Command+Z undoes the last committed change to the drawing. Key repeat walks back one step at a time. The past keeps the newest 100 steps, and the step older than that is dropped.
 
-A step restores the polylines and the blueprints together with the selection, the entered group, point editing, and the duplicate offset. The active tool, an unfinished draft, and pan and zoom stay where they are.
+A step restores the polylines, the blueprints, and the layers together with the selection, the entered group, point editing, and the duplicate offset. The active tool, the active pen, whether the layer island is open, an unfinished draft, and pan and zoom stay where they are. After undo, a pen that no longer exists becomes the bottom layer.
 
-One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, dropping a blueprint, locking or unlocking a blueprint, grouping, or ungrouping. A commit that leaves the polylines and the blueprints the same takes no step. Selecting, entering a group, panning, zooming, fitting, switching tools, and exporting take no step.
+One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, dropping a blueprint, locking or unlocking a blueprint, grouping, ungrouping, adding a layer, renaming a layer, recoloring a layer, deleting a layer, or assigning polylines to a layer. A commit that leaves the polylines, the blueprints, and the layers the same takes no step. Selecting, entering a group, choosing the pen, panning, zooming, fitting, switching tools, and exporting take no step.
 
 Command+Z during a pointer gesture does nothing. That gesture becomes one step when the pointer goes up and the drawing changed.

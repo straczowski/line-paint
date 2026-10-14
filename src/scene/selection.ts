@@ -916,6 +916,7 @@ function withGroupIds(
       closed: polyline.closed,
       stroke: polyline.stroke,
       widthMm: polyline.widthMm,
+      ...(polyline.layerId ? { layerId: polyline.layerId } : {}),
     }
   }
   if (sameGroupIds(polyline.groupIds, groupIds)) {

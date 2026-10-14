@@ -204,6 +204,137 @@ body {
   background: #f1f0ff;
 }
 
+.layer-anchor {
+  position: absolute;
+  top: 4.5rem;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.layer-island {
+  display: flex;
+  flex-direction: column;
+  width: 12rem;
+  max-height: 100%;
+  padding: 0.25rem;
+  pointer-events: auto;
+}
+
+.layer-add,
+.layer-delete {
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #1b1b1f;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+  cursor: pointer;
+}
+
+.layer-add:hover,
+.layer-delete:hover,
+.layer-assign-button:hover:not([aria-pressed='true']) {
+  background: #f1f0ff;
+}
+
+.layer-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+}
+
+.layer-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border-radius: 0.5rem;
+}
+
+.layer-item[data-active='true'] {
+  background: #e3e2fe;
+}
+
+.layer-name,
+.layer-name-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #1b1b1f;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+}
+
+.layer-name {
+  cursor: pointer;
+}
+
+.layer-swatch {
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.5rem;
+  padding: 0;
+  border: 1px solid #c5c5d0;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  flex: none;
+}
+
+.layer-swatch[aria-pressed='true'] {
+  outline: 2px solid #6965db;
+  outline-offset: 1px;
+}
+
+.layer-colors {
+  display: flex;
+  gap: 0.25rem;
+  flex-basis: 100%;
+  padding: 0 0.5rem 0.5rem;
+}
+
+.layer-colors .layer-swatch {
+  margin-right: 0;
+}
+
+.layer-delete {
+  flex-basis: 100%;
+}
+
+.layer-assign {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  flex-basis: 100%;
+}
+
+.layer-assign-button {
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #1b1b1f;
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.layer-assign-button[aria-pressed='true'] {
+  background: #e3e2fe;
+}
+
+.property-island {
+  flex-wrap: wrap;
+}
+
 .import-toast {
   position: absolute;
   left: 50%;

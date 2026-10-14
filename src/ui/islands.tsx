@@ -17,8 +17,11 @@ import {
   RiMergeCellsHorizontal,
   RiSplitCellsHorizontal,
 } from '@remixicon/react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AlignAction } from '../scene/align'
+import { layerColorChoices, layerNameLimit } from '../scene/layer'
+import type { Layer } from '../scene/layer'
 import type { Polyline } from '../scene/polyline'
 import type { ShapeKind } from '../scene/shape'
 import type { ImportNotice } from './files'
@@ -44,6 +47,7 @@ export function MenuIsland({
   onImportSvg,
   onExportGcode,
   onExportSvg,
+  onLayers,
 }: MenuIslandProps) {
   return (
     <>
@@ -83,6 +87,14 @@ export function MenuIsland({
             onClick={onImportSvg}
           >
             Import SVG
+          </button>
+          <button
+            type="button"
+            className="menu-action"
+            role="menuitem"
+            onClick={onLayers}
+          >
+            Layers
           </button>
         </div>
       )}
@@ -255,6 +267,7 @@ export function SelectIsland({
   onDelete,
   onAlign,
   onLock,
+  layerAssign,
 }: SelectIslandProps) {
   return (
     <div className="island property-island" role="group">
@@ -368,6 +381,175 @@ export function SelectIsland({
           )}
         </>
       )}
+      {layerAssign && (
+        <div className="layer-assign">
+          {layerAssign.layers.map((layer) => (
+            <button
+              key={layer.id}
+              type="button"
+              className="layer-assign-button"
+              aria-pressed={layer.id === layerAssign.sharedLayerId}
+              onClick={() => layerAssign.onAssign(layer.id)}
+            >
+              {layer.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function LayerIsland({
+  layers,
+  activeLayerId,
+  onChoose,
+  onAdd,
+  onRename,
+  onRecolor,
+  onDelete,
+}: LayerIslandProps) {
+  const [editingId, setEditingId] = useState<string>()
+  const [colorId, setColorId] = useState<string>()
+  const [deleteId, setDeleteId] = useState<string>()
+  const skipBlur = useRef(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!colorId && !deleteId) {
+      return
+    }
+
+    const close = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        rootRef.current?.contains(event.target)
+      ) {
+        return
+      }
+      setColorId(undefined)
+      setDeleteId(undefined)
+    }
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [colorId, deleteId])
+
+  return (
+    <div className="layer-anchor">
+      <div ref={rootRef} className="island layer-island">
+        <button type="button" className="layer-add" onClick={onAdd}>
+          + Add layer
+        </button>
+        <ul className="layer-list">
+          {layers.map((layer) => (
+            <li
+              key={layer.id}
+              className="layer-item"
+              data-active={layer.id === activeLayerId}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                setColorId(undefined)
+                setEditingId(undefined)
+                setDeleteId(layers.length > 1 ? layer.id : undefined)
+              }}
+            >
+              {editingId === layer.id ? (
+                <input
+                  className="layer-name-input"
+                  aria-label={`Rename ${layer.name}`}
+                  maxLength={layerNameLimit}
+                  defaultValue={layer.name}
+                  autoFocus
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== 'Escape') {
+                      return
+                    }
+                    event.preventDefault()
+                    skipBlur.current = true
+                    if (event.key === 'Enter') {
+                      onRename(layer.id, event.currentTarget.value)
+                    }
+                    setEditingId(undefined)
+                  }}
+                  onBlur={(event) => {
+                    if (skipBlur.current) {
+                      skipBlur.current = false
+                      return
+                    }
+                    onRename(layer.id, event.currentTarget.value)
+                    setEditingId(undefined)
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="layer-name"
+                  aria-pressed={layer.id === activeLayerId}
+                  onClick={() => {
+                    setColorId(undefined)
+                    setDeleteId(undefined)
+                    onChoose(layer.id)
+                  }}
+                  onDoubleClick={() => {
+                    setColorId(undefined)
+                    setDeleteId(undefined)
+                    setEditingId(layer.id)
+                  }}
+                >
+                  {layer.name}
+                </button>
+              )}
+              <button
+                type="button"
+                className="layer-swatch"
+                aria-label={`${layer.name} color`}
+                aria-expanded={colorId === layer.id}
+                style={{ background: layer.color }}
+                onClick={() => {
+                  onChoose(layer.id)
+                  setDeleteId(undefined)
+                  setColorId((current) =>
+                    current === layer.id ? undefined : layer.id,
+                  )
+                }}
+              />
+              {colorId === layer.id && (
+                <div
+                  className="layer-colors"
+                  role="group"
+                  aria-label={`${layer.name} colors`}
+                >
+                  {layerColorChoices.map((choice) => (
+                    <button
+                      key={choice.color}
+                      type="button"
+                      className="layer-swatch"
+                      aria-label={choice.name}
+                      aria-pressed={layer.color === choice.color}
+                      style={{ background: choice.color }}
+                      onClick={() => {
+                        onRecolor(layer.id, choice.color)
+                        setColorId(undefined)
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              {deleteId === layer.id && (
+                <button
+                  type="button"
+                  className="layer-delete"
+                  onClick={() => {
+                    onDelete(layer.id)
+                    setDeleteId(undefined)
+                  }}
+                >
+                  Delete
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }
@@ -465,6 +647,7 @@ type MenuIslandProps = {
   onImportSvg: () => void
   onExportGcode: () => void
   onExportSvg: () => void
+  onLayers: () => void
 }
 
 type ToolIslandProps = {
@@ -516,6 +699,23 @@ type SelectIslandProps = {
   onAlign: (action: AlignAction) => void
   lock: 'locked' | 'unlocked' | undefined
   onLock: () => void
+  layerAssign?: LayerAssign
+}
+
+type LayerAssign = {
+  layers: readonly Layer[]
+  sharedLayerId: string | undefined
+  onAssign: (layerId: string) => void
+}
+
+type LayerIslandProps = {
+  layers: readonly Layer[]
+  activeLayerId: string
+  onChoose: (layerId: string) => void
+  onAdd: () => void
+  onRename: (layerId: string, name: string) => void
+  onRecolor: (layerId: string, color: string) => void
+  onDelete: (layerId: string) => void
 }
 
 type ChoiceButtonProps = {

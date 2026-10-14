@@ -413,6 +413,7 @@ describe('duplicatePolylines', () => {
         ...stroke('source', [point(1, 2), point(3, 4)], true),
         stroke: '#e03131',
         widthMm: 0.5,
+        layerId: 'red',
       },
       stroke('stay', [point(8, 9), point(10, 11)]),
     ]
@@ -431,6 +432,7 @@ describe('duplicatePolylines', () => {
       closed: true,
       stroke: '#e03131',
       widthMm: 0.5,
+      layerId: 'red',
     })
     expect(next[2]?.points).not.toBe(scene[0]?.points)
     expect(next[2]?.points[0]).not.toBe(scene[0]?.points[0])

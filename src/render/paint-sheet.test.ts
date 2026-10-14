@@ -142,6 +142,25 @@ describe('selection paint', () => {
 
     expect(draft.strokes).toEqual(['#1e1e1e'])
 
+    const ink = new RecordingPen()
+    paintOverlay({
+      context: ink,
+      draftPoints: [point(1, 2), point(4, 5)],
+      draftColor: '#e03131',
+      preview: [],
+      bounds: undefined,
+      rotatedBounds: undefined,
+      dashed: false,
+      scaleHandles: false,
+      rotateHandle: undefined,
+      marquee: undefined,
+      handles: [],
+      fit,
+      size,
+    })
+
+    expect(ink.strokes).toEqual(['#e03131'])
+
     const handle = new RecordingPen()
     paintOverlay({
       context: handle,
