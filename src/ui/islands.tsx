@@ -15,7 +15,6 @@ import {
   RiLockUnlockLine,
   RiMenuLine,
   RiMergeCellsHorizontal,
-  RiRouteLine,
   RiSplitCellsHorizontal,
 } from '@remixicon/react'
 import type { ReactNode } from 'react'
@@ -266,14 +265,14 @@ export function SelectIsland({
             pressed={!polyline.closed}
             onPress={() => onClosed(false)}
           >
-            <RiRouteLine />
+            <OpenIcon />
           </ChoiceButton>
           <ChoiceButton
             label="Closed"
             pressed={polyline.closed}
             onPress={() => onClosed(true)}
           >
-            <RiCircleLine />
+            <ClosedIcon />
           </ChoiceButton>
         </>
       )}
@@ -370,6 +369,38 @@ export function SelectIsland({
         </>
       )}
     </div>
+  )
+}
+
+function OpenIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M4 3.5 11 2.8 14 8 11 13.2 4 12.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="4" cy="3.5" r="1.15" fill="currentColor" />
+      <circle cx="4" cy="12.5" r="1.15" fill="currentColor" />
+    </svg>
+  )
+}
+
+function ClosedIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M4 3.5 11 2.8 14 8 11 13.2 4 12.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
