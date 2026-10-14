@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
+import { commitPolyline } from '../scene/polyline'
 import type { Point } from '../scene/polyline'
+import { shapePoints } from '../scene/shape'
+import type { ShapeKind } from '../scene/shape'
 import {
   blueprintAt,
   blueprintCenter,
@@ -72,6 +75,8 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setGesture,
     setShiftHeld,
     setAltHeld,
+    setCommandHeld,
+    shapeKind,
   } = input
 
   useEffect(() => {
@@ -103,6 +108,8 @@ export function useSheetPointer(input: SheetPointerInput): void {
       setGesture,
       setShiftHeld,
       setAltHeld,
+      setCommandHeld,
+      shapeKind,
     }
     const onPointerDown = (event: PointerEvent) => {
       beginSheetPointer(canvas, event, sheetPointer)
@@ -152,6 +159,8 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setSelectedIds,
     setAltHeld,
     setShiftHeld,
+    setCommandHeld,
+    shapeKind,
     tool,
     viewport,
     zoom,
@@ -165,6 +174,7 @@ function beginSheetPointer(
 ): void {
   noteHeldKey(event.shiftKey, input.setShiftHeld)
   noteHeldKey(event.altKey, input.setAltHeld)
+  noteHeldKey(event.metaKey, input.setCommandHeld)
   if (event.button !== 0) {
     return
   }
@@ -185,6 +195,11 @@ function beginSheetPointer(
       }),
     ])
     input.setFollower(located.scene)
+    return
+  }
+
+  if (input.tool === 'shape') {
+    beginShape(canvas, event, located, input)
     return
   }
 
@@ -212,6 +227,26 @@ function beginSheetPointer(
   input.gestureRef.current = press
   input.setGesture(press)
   placeScaleCursor(canvas, located, input)
+}
+
+function beginShape(
+  canvas: HTMLCanvasElement,
+  event: PointerEvent,
+  located: LocatedPointer,
+  input: SheetPointerInput,
+): void {
+  if (event.isTrusted) {
+    canvas.setPointerCapture(event.pointerId)
+  }
+  const gesture: ShapeGesture = {
+    kind: 'shape',
+    pointerId: event.pointerId,
+    startCanvas: located.canvas,
+    startScene: located.scene,
+    currentScene: located.scene,
+  }
+  input.gestureRef.current = gesture
+  input.setGesture(gesture)
 }
 
 function beginPointEdit(
@@ -300,6 +335,7 @@ function moveSheetPointer(
 ): void {
   noteHeldKey(event.shiftKey, input.setShiftHeld)
   noteHeldKey(event.altKey, input.setAltHeld)
+  noteHeldKey(event.metaKey, input.setCommandHeld)
   if (input.tool === 'polyline') {
     canvas.style.cursor = ''
     followDraft(canvas, event, input)
@@ -364,6 +400,7 @@ function samePoint(start: Point, end: Point): boolean {
 function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
   noteHeldKey(event.shiftKey, input.setShiftHeld)
   noteHeldKey(event.altKey, input.setAltHeld)
+  noteHeldKey(event.metaKey, input.setCommandHeld)
   const gesture = input.gestureRef.current
   if (!gesture || gesture.pointerId !== event.pointerId) {
     return
@@ -454,6 +491,10 @@ function endSheetPointer(event: PointerEvent, input: SheetPointerInput): void {
           shiftHeld: event.shiftKey,
         }),
     )
+    return
+  }
+  if (gesture.kind === 'shape') {
+    finishShape(gesture, input, event)
     return
   }
   if (
@@ -637,6 +678,44 @@ function moveEditedPoint(
   )
 }
 
+function finishShape(
+  gesture: ShapeGesture,
+  input: SheetPointerInput,
+  event: PointerEvent,
+): void {
+  const canvas = input.canvasRef.current
+  if (!canvas) {
+    return
+  }
+
+  const located = locatePointer(canvas, event, input.viewport)
+  if (
+    !located ||
+    !pointerPassedClickSlop(gesture.startCanvas, located.canvas)
+  ) {
+    return
+  }
+
+  const points = shapePoints({
+    anchor: gesture.startScene,
+    pointer: located.scene,
+    kind: input.shapeKind,
+    fromCenter: event.metaKey,
+    symmetric: event.shiftKey,
+  })
+  if (!points) {
+    return
+  }
+
+  input.commitScene((current) =>
+    commitPolyline(current, {
+      id: crypto.randomUUID(),
+      points,
+      closed: true,
+    }),
+  )
+}
+
 function cancelSheetPointer(
   event: PointerEvent,
   gestureRef: RefObject<SelectGesture | undefined>,
@@ -674,7 +753,8 @@ export function advanceGesture(
     gesture.kind === 'marquee' ||
     gesture.kind === 'move' ||
     gesture.kind === 'point' ||
-    gesture.kind === 'scale'
+    gesture.kind === 'scale' ||
+    gesture.kind === 'shape'
   ) {
     return {
       gesture: { ...gesture, currentScene: located.scene },
@@ -942,7 +1022,7 @@ function noteHeldKey(
   setHeld((current) => (current === held ? current : held))
 }
 
-export type Tool = 'select' | 'polyline'
+export type Tool = 'select' | 'polyline' | 'shape'
 
 export type SelectGesture =
   | PressGesture
@@ -951,6 +1031,7 @@ export type SelectGesture =
   | PointGesture
   | ScaleGesture
   | RotateGesture
+  | ShapeGesture
 
 export type PressGesture = {
   kind: 'press'
@@ -996,6 +1077,14 @@ export type ScaleGesture = {
   handle: ScaleHandle
 }
 
+export type ShapeGesture = {
+  kind: 'shape'
+  pointerId: number
+  startCanvas: Point
+  startScene: Point
+  currentScene: Point
+}
+
 export type RotateGesture = {
   kind: 'rotate'
   pointerId: number
@@ -1034,6 +1123,8 @@ type SheetPointerInput = {
   setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>
   setShiftHeld: Dispatch<SetStateAction<boolean>>
   setAltHeld: Dispatch<SetStateAction<boolean>>
+  setCommandHeld: Dispatch<SetStateAction<boolean>>
+  shapeKind: ShapeKind
 }
 
 type LocatedPointer = {

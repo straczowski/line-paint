@@ -54,6 +54,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | SVG and GCode text | `src/scene/export.ts` |
 | Shift lock | `src/scene/ruler.ts` |
 | Commit a polyline, open or closed | `src/scene/polyline.ts` |
+| Rectangle and ellipse points | `src/scene/shape.ts` |
 | Sheet size, fit, scene Y | `src/scene/sheet.ts` |
 | Pixels | `src/render/paint-sheet.ts` |
 | Scene state and canvas hooks | `src/ui/App.tsx` |

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Point, Polyline } from '../scene/polyline'
 import { hiddenPolylineKey, overlayFrame } from './overlay-frame'
-import type { MoveGesture, RotateGesture, SelectGesture } from './sheet-pointer'
+import type {
+  MoveGesture,
+  RotateGesture,
+  SelectGesture,
+  ShapeGesture,
+} from './sheet-pointer'
 
 describe('overlayFrame', () => {
   const scene = [stroke('line', [point(0, 0), point(10, 0)])]
@@ -289,6 +294,38 @@ describe('selection accent', () => {
       },
     ])
     expect(scene[0]?.stroke).toBe('#1e1e1e')
+  })
+
+  it('closes the shape preview on the overlay', () => {
+    const gesture: ShapeGesture = {
+      kind: 'shape',
+      pointerId: 1,
+      startCanvas: point(0, 0),
+      startScene: point(0, 0),
+      currentScene: point(30, 10),
+    }
+    const frame = overlayFrame(
+      [],
+      [],
+      undefined,
+      [],
+      gesture,
+      undefined,
+      false,
+      false,
+      1,
+      1,
+      [],
+      { kind: 'rectangle', fromCenter: false },
+    )
+
+    expect(frame.draftPoints).toEqual([
+      point(0, 0),
+      point(30, 0),
+      point(30, 10),
+      point(0, 10),
+      point(0, 0),
+    ])
   })
 })
 

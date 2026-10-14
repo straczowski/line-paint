@@ -19,6 +19,7 @@ import { gcodeDocument, svgDocument } from '../scene/export'
 import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
+import type { ShapeKind } from '../scene/shape'
 import {
   deletePolylines,
   enteredGroupAfterRemoval,
@@ -61,6 +62,7 @@ import {
   MenuIsland,
   NavigationIsland,
   SelectIsland,
+  ShapeIsland,
   ToolIsland,
 } from './islands'
 import {
@@ -79,6 +81,7 @@ export function App() {
   const [draftPoints, setDraftPoints] = useState<readonly Point[]>([])
   const [follower, setFollower] = useState<Point>()
   const [tool, setTool] = useState<Tool>('polyline')
+  const [shapeKind, setShapeKind] = useState<ShapeKind>('rectangle')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [enteredGroupId, setEnteredGroupId] = useState<string>()
@@ -87,6 +90,7 @@ export function App() {
   const [gesture, setGesture] = useState<SelectGesture>()
   const [shiftHeld, setShiftHeld] = useHeldKey('Shift')
   const [altHeld, setAltHeld] = useHeldKey('Alt')
+  const [commandHeld, setCommandHeld] = useHeldKey('Meta')
   const windowSize = useWindowSize()
   const [viewport, setViewport] = useState(() => fitSheet(readWindowSize()))
   const zoom = viewZoom(viewport.scale, fitSheet(windowSize).scale)
@@ -179,9 +183,10 @@ export function App() {
   }
   const chooseTool = (next: Tool) => {
     setTool(next)
-    if (next === 'select') {
+    if (next !== 'polyline') {
       clearDraft()
-    } else {
+    }
+    if (next !== 'select') {
       setSelectedIds([])
       setEnteredGroupId(undefined)
       setDuplicateDelta(undefined)
@@ -223,6 +228,7 @@ export function App() {
       zoom,
       viewport.scale,
       images,
+      { kind: shapeKind, fromCenter: commandHeld },
     ),
     windowSize,
     viewport,
@@ -253,6 +259,8 @@ export function App() {
     setGesture,
     setShiftHeld,
     setAltHeld,
+    setCommandHeld,
+    shapeKind,
   })
   const deleteSelection = useCallback(() => {
     const before = drawingRef.current
@@ -297,11 +305,13 @@ export function App() {
   useGroupShortcut(tool, drawingRef, commitScene)
   useFinishOnEnter(finishDraft)
 
-  const showHint =
-    tool === 'polyline' &&
-    scene.length === 0 &&
-    images.length === 0 &&
-    draftPoints.length === 0
+  const sheetIsEmpty = scene.length === 0 && images.length === 0
+  const hint =
+    tool === 'polyline' && sheetIsEmpty && draftPoints.length === 0
+      ? 'Click to add a point. Enter to finish.'
+      : tool === 'shape' && sheetIsEmpty && gesture?.kind !== 'shape'
+        ? 'Drag to draw a shape.'
+        : undefined
   const hintCenter = sheetCenterOnCanvas(viewport)
   const selectedPolyline = lonePolyline(scene, selectedIds)
   const groupActions = selectionGroupActions(
@@ -391,12 +401,12 @@ export function App() {
     <main ref={hostRef} className="sheet-host">
       <canvas ref={staticCanvasRef} className="sheet-canvas" />
       <canvas ref={overlayCanvasRef} className="sheet-canvas" />
-      {showHint && (
+      {hint && (
         <p
           className="sheet-hint"
           style={{ left: hintCenter.x, top: hintCenter.y }}
         >
-          Click to add a point. Enter to finish.
+          {hint}
         </p>
       )}
       <input
@@ -440,6 +450,9 @@ export function App() {
             enabled={draftPoints.length > 0}
             onFinish={finishDraft}
           />
+        )}
+        {tool === 'shape' && (
+          <ShapeIsland shape={shapeKind} onShape={setShapeKind} />
         )}
         {tool === 'select' && selectedIds.length > 0 && (
           <SelectIsland

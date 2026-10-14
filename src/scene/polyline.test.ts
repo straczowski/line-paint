@@ -44,6 +44,22 @@ describe('commitPolyline', () => {
     expect(polyline?.points).not.toBe(points)
   })
 
+  it('stores a closed draft when the flag is set', () => {
+    const points = [point(0, 0), point(30, 0), point(30, 10), point(0, 10)]
+    const scene = commitPolyline(emptyScene, {
+      id: 'box',
+      points,
+      closed: true,
+    })
+
+    expect(scene[0]).toMatchObject({
+      closed: true,
+      points,
+      stroke: '#1e1e1e',
+      widthMm: 0.3,
+    })
+  })
+
   it('drops a preview with fewer than two points', () => {
     const scene = commitPolyline(emptyScene, {
       id: 'kept',

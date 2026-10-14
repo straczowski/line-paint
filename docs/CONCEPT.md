@@ -27,6 +27,14 @@ Enter, or a Finish button, commits those points as one polyline. Fewer than two 
 
 When a polyline is selected, the left panel has one toggle: open or closed. Closed draws one more segment from the last point back to the first. Open does not.
 
+## Shape tool
+
+The Shape tool drags a rectangle or an ellipse. The island under the tools has one icon for each. Rectangle is the first choice.
+
+The click is one corner and the pointer is the opposite corner. Command makes the clicked point the center. Shift makes the width and height equal to the longer span. Both together center a square or a circle.
+
+Pointer up commits one closed polyline. A rectangle is the four corners. An ellipse is points on the curve, spaced so each straight side stays within 0.2 mm of it, and at least eight points. A press under 4 px, or a box with a zero side, commits nothing.
+
 ## Selection
 
 - Click a polyline to select the whole object. A grouped polyline selects every polyline in its outermost group. Hold Shift while clicking another object to add it to the selection. Drag the selection to move it.

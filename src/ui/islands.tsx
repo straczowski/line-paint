@@ -7,6 +7,7 @@ import {
   RiAlignItemVerticalCenterLine,
   RiCheckLine,
   RiCircleLine,
+  RiRectangleLine,
   RiDeleteBinLine,
   RiFileCopyLine,
   RiFullscreenLine,
@@ -20,6 +21,7 @@ import {
 import type { ReactNode } from 'react'
 import type { AlignAction } from '../scene/align'
 import type { Polyline } from '../scene/polyline'
+import type { ShapeKind } from '../scene/shape'
 import type { ImportNotice } from './files'
 import type { Tool } from './sheet-pointer'
 
@@ -106,6 +108,13 @@ export function ToolIsland({ tool, onTool }: ToolIslandProps) {
       >
         <PolylineIcon />
       </ToolButton>
+      <ToolButton
+        label="Shape"
+        pressed={tool === 'shape'}
+        onPress={() => onTool('shape')}
+      >
+        <ShapeIcon />
+      </ToolButton>
     </div>
   )
 }
@@ -121,6 +130,22 @@ function ToolButton({ label, pressed, onPress, children }: ToolButtonProps) {
     >
       {children}
     </button>
+  )
+}
+
+function ShapeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect
+        x="2.5"
+        y="3.5"
+        width="11"
+        height="9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
   )
 }
 
@@ -175,6 +200,27 @@ export function NavigationIsland({
           <RiFullscreenLine />
         </button>
       </div>
+    </div>
+  )
+}
+
+export function ShapeIsland({ shape, onShape }: ShapeIslandProps) {
+  return (
+    <div className="island property-island" role="group">
+      <ChoiceButton
+        label="Rectangle"
+        pressed={shape === 'rectangle'}
+        onPress={() => onShape('rectangle')}
+      >
+        <RiRectangleLine />
+      </ChoiceButton>
+      <ChoiceButton
+        label="Ellipse"
+        pressed={shape === 'ellipse'}
+        onPress={() => onShape('ellipse')}
+      >
+        <RiCircleLine />
+      </ChoiceButton>
     </div>
   )
 }
@@ -406,6 +452,11 @@ type NavigationIslandProps = {
   percent: number
   onResetZoom: () => void
   onFit: () => void
+}
+
+type ShapeIslandProps = {
+  shape: ShapeKind
+  onShape: (shape: ShapeKind) => void
 }
 
 type FinishIslandProps = {

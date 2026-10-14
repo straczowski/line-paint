@@ -1,5 +1,7 @@
 import { previewStrokePoints } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
+import { shapePoints } from '../scene/shape'
+import type { ShapeKind } from '../scene/shape'
 import {
   blueprintCorners,
   blueprintPoints,
@@ -33,6 +35,7 @@ import type {
   RotateGesture,
   ScaleGesture,
   SelectGesture,
+  ShapeGesture,
 } from './sheet-pointer'
 
 export function overlayFrame(
@@ -47,6 +50,7 @@ export function overlayFrame(
   zoom: number,
   pixelsPerMm: number,
   images: readonly Blueprint[] = [],
+  shape: ShapePreview | undefined = undefined,
 ): OverlayFrame {
   const single = loneBlueprint(images, selectedIds)
   if (single) {
@@ -81,10 +85,13 @@ export function overlayFrame(
         zoom,
       )
   return {
-    draftPoints: previewStrokePoints(
-      draftPoints,
-      followerEnd(draftPoints, follower, shiftHeld),
-    ),
+    draftPoints:
+      gesture?.kind === 'shape'
+        ? shapeDraftPoints(gesture, shape, shiftHeld)
+        : previewStrokePoints(
+            draftPoints,
+            followerEnd(draftPoints, follower, shiftHeld),
+          ),
     preview:
       rotation?.preview ??
       overlayPreview(scene, selectedIds, gesture, shiftHeld, altHeld, zoom),
@@ -168,6 +175,29 @@ function dragHide(
     return { kind: 'move', ids: gesture.ids, altHeld }
   }
   return undefined
+}
+
+function shapeDraftPoints(
+  gesture: ShapeGesture,
+  shape: ShapePreview | undefined,
+  shiftHeld: boolean,
+): readonly Point[] {
+  if (!shape) {
+    return []
+  }
+
+  const points = shapePoints({
+    anchor: gesture.startScene,
+    pointer: gesture.currentScene,
+    kind: shape.kind,
+    fromCenter: shape.fromCenter,
+    symmetric: shiftHeld,
+  })
+  const first = points?.[0]
+  if (!points || !first) {
+    return []
+  }
+  return [...points, first]
 }
 
 function followerEnd(
@@ -699,6 +729,11 @@ type RotationOverlay = {
   corners: readonly Point[]
   handle: Point
   blueprints: readonly Blueprint[]
+}
+
+type ShapePreview = {
+  kind: ShapeKind
+  fromCenter: boolean
 }
 
 type ActiveSelection = {
