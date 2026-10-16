@@ -97,6 +97,26 @@ export function deleteLayer(
   }
 }
 
+export function resetLayers(
+  layers: readonly Layer[],
+  scene: readonly Polyline[],
+): LayerPaint {
+  const start = defaultLayers()
+  const receiver = bottomLayer(start)
+  const sceneNext = paintWhere(scene, () => true, receiver)
+  const only = layers.length === 1 ? layers[0] : undefined
+  if (
+    sceneNext === scene &&
+    only?.id === receiver.id &&
+    only.name === receiver.name &&
+    only.color === receiver.color
+  ) {
+    return { layers, scene }
+  }
+
+  return { layers: start, scene: sceneNext }
+}
+
 export function assignPolylines(
   scene: readonly Polyline[],
   ids: readonly string[],

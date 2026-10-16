@@ -51,6 +51,8 @@ A layer is a pen. The drawing always has at least one. The first is named Defaul
 
 Layers is a menu item. It opens an island in the middle of the right edge. The list runs newest first. Add layer inserts one above the others. Double-click a name to rename it, at most 32 characters. The swatch sets one of the five stroke colors, and every polyline on that layer takes that color. Clicking a row chooses the pen for the next stroke. It does not move the selection.
 
+Choosing Layers while that island is open deactivates the layer system. That is a reset. The list becomes the one Default layer colored `#1e1e1e`, every polyline is stored on it and painted that color, and the active pen becomes that layer. Choosing Layers while the island is closed only opens the island.
+
 While Select is active and the drawing has two or more layers, the select island shows one button per layer, marked with that layer's color. Choosing one puts the selected polylines on that layer, including every member of a group. With one layer those buttons are absent.
 
 Right-click a layer row to delete it. The last layer cannot be deleted. Polylines on a deleted layer join the next layer down. The bottom layer's polylines join the one above, and their strokes take that layer's color.
@@ -90,6 +92,6 @@ Command+Z undoes the last committed change to the drawing. Key repeat walks back
 
 A step restores the polylines, the blueprints, and the layers together with the selection, the entered group, point editing, and the duplicate offset. The active tool, the active pen, whether the layer island is open, an unfinished draft, and pan and zoom stay where they are. After undo, a pen that no longer exists becomes the bottom layer.
 
-One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, dropping a blueprint, locking or unlocking a blueprint, grouping, ungrouping, adding a layer, renaming a layer, recoloring a layer, deleting a layer, or assigning polylines to a layer. A commit that leaves the polylines, the blueprints, and the layers the same takes no step. Selecting, entering a group, choosing the pen, panning, zooming, fitting, switching tools, and exporting take no step.
+One step is finishing a polyline, moving, scaling, rotating, aligning, distributing, duplicating, moving a point, inserting a point, deleting a point, deleting the selection, toggling open or closed, importing an SVG, dropping a blueprint, locking or unlocking a blueprint, grouping, ungrouping, adding a layer, renaming a layer, recoloring a layer, deleting a layer, assigning polylines to a layer, or deactivating layers. A commit that leaves the polylines, the blueprints, and the layers the same takes no step. Selecting, entering a group, choosing the pen, panning, zooming, fitting, switching tools, and exporting take no step.
 
 Command+Z during a pointer gesture does nothing. That gesture becomes one step when the pointer goes up and the drawing changed.

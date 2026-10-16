@@ -26,7 +26,7 @@ The window outside the sheet is light grey. The sheet is the white page. Control
 - Top left: one menu button. Export and preferences live in that menu, not on the canvas.
 - A property island appears only for the active tool or selection, and only with the few settings that tool needs.
 - Top right: navigation. The zoom percentage, then a fit icon.
-- Middle of the right edge, only while Layers is open: the layer island. It does not sit on the tool row. While that island is open, the Layers menu item shows a check after the word. While it is closed, the item is the word alone.
+- Middle of the right edge, only while Layers is open: the layer island. It does not sit on the tool row. While that island is open, the Layers menu item shows a check after the word. While it is closed, the item is the word alone. Turning the check off resets the pens to the one Default layer and paints every polyline `#1e1e1e`.
 - A layer name field at its 32-character cap has a `#e03131` border. Under the cap it has none.
 - On the select island, each layer button is that layer's color square. The squares are centered in the row and do not stretch.
 - No Upgrade, Share, library, live collaboration, or sign-in.

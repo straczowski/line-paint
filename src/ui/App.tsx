@@ -33,6 +33,7 @@ import {
   penLayer,
   renameLayer,
   recolorLayer,
+  resetLayers,
   sharedLayerId,
 } from '../scene/layer'
 import type { ImportedPolyline } from '../scene/import'
@@ -513,6 +514,14 @@ export function App() {
       ),
     )
   }
+  const deactivateLayers = () => {
+    const drawing = drawingRef.current
+    const next = resetLayers(drawing.layers, drawing.scene)
+    commitScene(next.scene, undefined, undefined, next.layers)
+    setActiveLayerId(defaultLayerId)
+    setLayersOpen(false)
+    setMenuOpen(false)
+  }
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selectedPolylines = scene.some((polyline) =>
     selectedIdSet.has(polyline.id),
@@ -574,7 +583,11 @@ export function App() {
             setMenuOpen(false)
           }}
           onLayers={() => {
-            setLayersOpen((open) => !open)
+            if (layersOpen) {
+              deactivateLayers()
+              return
+            }
+            setLayersOpen(true)
             setMenuOpen(false)
           }}
           onExportSvg={() => {

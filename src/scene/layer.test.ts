@@ -6,6 +6,7 @@ import {
   deleteLayer,
   renameLayer,
   recolorLayer,
+  resetLayers,
 } from './layer'
 import type { Layer } from './layer'
 import type { Point, Polyline } from './polyline'
@@ -109,6 +110,41 @@ describe('layers', () => {
     expect(next[1]?.layerId).toBe('red')
     expect(next[2]).toBe(scene[2])
     expect(assignPolylines(next, ['a', 'b', 'c'], layers, 'red')).toBe(next)
+  })
+
+  it('resets every polyline onto the black Default layer', () => {
+    const layers = [
+      layer('red', 'Red', '#e03131'),
+      layer('default', 'Ink', '#1971c2'),
+    ]
+    const scene = [
+      line('a', 'red', ['g'], '#e03131'),
+      line('b', 'default', undefined, '#1971c2'),
+      line('c', 'default'),
+    ]
+    const reset = resetLayers(layers, scene)
+
+    expect(reset.layers).toEqual(defaultLayers())
+    expect(reset.scene[0]).toMatchObject({
+      layerId: 'default',
+      stroke: '#1e1e1e',
+      groupIds: ['g'],
+    })
+    expect(reset.scene[0]?.points).toBe(scene[0]?.points)
+    expect(reset.scene[1]).toMatchObject({
+      layerId: 'default',
+      stroke: '#1e1e1e',
+    })
+    expect(reset.scene[2]).toBe(scene[2])
+  })
+
+  it('leaves a drawing that is already the black Default layer', () => {
+    const layers = defaultLayers()
+    const scene = [line('a', 'default')]
+    const reset = resetLayers(layers, scene)
+
+    expect(reset.layers).toBe(layers)
+    expect(reset.scene).toBe(scene)
   })
 })
 
