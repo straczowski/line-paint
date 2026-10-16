@@ -49,9 +49,9 @@ Pointer up commits one closed polyline. A rectangle is the four corners. An elli
 
 A layer is a pen. The drawing always has at least one. The first is named Default and its color is the default stroke, `#1e1e1e`. A new polyline is stored on the active layer and painted in that color.
 
-Layers is a menu item. It opens an island in the middle of the right edge. The list runs newest first. Add layer inserts one above the others. Double-click a name to rename it, at most 12 characters. The swatch sets one of the five stroke colors, and every polyline on that layer takes that color. Clicking a row chooses the pen for the next stroke. It does not move the selection.
+Layers is a menu item. It opens an island in the middle of the right edge. The list runs newest first. Add layer inserts one above the others. Double-click a name to rename it, at most 32 characters. The swatch sets one of the five stroke colors, and every polyline on that layer takes that color. Clicking a row chooses the pen for the next stroke. It does not move the selection.
 
-While Select is active and the drawing has two or more layers, the select island shows one button per layer. Choosing one puts the selected polylines on that layer, including every member of a group. With one layer those buttons are absent.
+While Select is active and the drawing has two or more layers, the select island shows one button per layer, marked with that layer's color. Choosing one puts the selected polylines on that layer, including every member of a group. With one layer those buttons are absent.
 
 Right-click a layer row to delete it. The last layer cannot be deleted. Polylines on a deleted layer join the next layer down. The bottom layer's polylines join the one above, and their strokes take that layer's color.
 

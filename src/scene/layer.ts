@@ -224,7 +224,7 @@ function requiredLayer(layers: readonly Layer[], id: string): Layer {
 
 export const defaultLayerId = 'default'
 
-export const layerNameLimit = 12
+export const layerNameLimit = 32
 
 export const layerColorChoices = [
   { name: 'Black', color: '#1e1e1e' },

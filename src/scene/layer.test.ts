@@ -31,8 +31,14 @@ describe('layers', () => {
   it('keeps a name that is blank, too long, or already used', () => {
     const layers = addLayer(defaultLayers(), 'two')
 
+    const atCap = 'n'.repeat(32)
+
     expect(renameLayer(layers, 'two', '   ')).toBe(layers)
-    expect(renameLayer(layers, 'two', 'Default Layer')).toBe(layers)
+    expect(renameLayer(layers, 'two', 'Default Layer')[0]?.name).toBe(
+      'Default Layer',
+    )
+    expect(renameLayer(layers, 'two', atCap)[0]?.name).toBe(atCap)
+    expect(renameLayer(layers, 'two', `${atCap}n`)).toBe(layers)
     expect(renameLayer(layers, 'two', 'My Red Layer')[0]?.name).toBe(
       'My Red Layer',
     )

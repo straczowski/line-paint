@@ -59,7 +59,11 @@ export function useSelectBackspace(
 ): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isPlainBackspace(event) || tool !== 'select') {
+      if (
+        !isPlainBackspace(event) ||
+        tool !== 'select' ||
+        backspaceEditsField(event.target)
+      ) {
         return
       }
 
@@ -238,6 +242,16 @@ export function selectionGroupActions(
 }
 
 const offeredGroupId = 'offer'
+
+export function backspaceEditsField(
+  target: EventTarget | { readonly tagName: string } | null,
+): boolean {
+  if (!target || !('tagName' in target)) {
+    return false
+  }
+
+  return target.tagName === 'INPUT'
+}
 
 function isPlainBackspace(event: KeyboardEvent): boolean {
   return (

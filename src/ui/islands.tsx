@@ -43,6 +43,7 @@ export function ImportToast({ notice }: ImportToastProps) {
 
 export function MenuIsland({
   open,
+  layersOpen,
   onToggle,
   onImportSvg,
   onExportGcode,
@@ -92,9 +93,11 @@ export function MenuIsland({
             type="button"
             className="menu-action"
             role="menuitem"
+            aria-pressed={layersOpen}
             onClick={onLayers}
           >
             Layers
+            {layersOpen && <RiCheckLine />}
           </button>
         </div>
       )}
@@ -270,117 +273,119 @@ export function SelectIsland({
   layerAssign,
 }: SelectIslandProps) {
   return (
-    <div className="island property-island" role="group">
-      {polyline && (
-        <>
-          <ChoiceButton
-            label="Open"
-            pressed={!polyline.closed}
-            onPress={() => onClosed(false)}
-          >
-            <OpenIcon />
-          </ChoiceButton>
-          <ChoiceButton
-            label="Closed"
-            pressed={polyline.closed}
-            onPress={() => onClosed(true)}
-          >
-            <ClosedIcon />
-          </ChoiceButton>
-        </>
-      )}
-      {showDuplicate && (
-        <button
-          type="button"
-          className="action-button"
-          aria-label="Duplicate"
-          onClick={onDuplicate}
-        >
-          <RiFileCopyLine />
-        </button>
-      )}
-      {showGroup && (
-        <button
-          type="button"
-          className="action-button"
-          aria-label="Group"
-          onClick={onGroup}
-        >
-          <RiMergeCellsHorizontal />
-        </button>
-      )}
-      {showUngroup && (
-        <button
-          type="button"
-          className="action-button"
-          aria-label="Ungroup"
-          onClick={onUngroup}
-        >
-          <RiSplitCellsHorizontal />
-        </button>
-      )}
-      {lock && (
-        <button
-          type="button"
-          className="action-button"
-          aria-label={lock === 'locked' ? 'Unlock' : 'Lock'}
-          onClick={onLock}
-        >
-          {lock === 'locked' ? <RiLockLine /> : <RiLockUnlockLine />}
-        </button>
-      )}
-      <button
-        type="button"
-        className="delete-button"
-        aria-label="Delete"
-        onClick={onDelete}
-      >
-        <RiDeleteBinLine />
-      </button>
-      {showAlign && (
-        <>
-          <AlignButton label="Align left" onPress={() => onAlign('left')}>
-            <RiAlignItemLeftLine />
-          </AlignButton>
-          <AlignButton
-            label="Center horizontally"
-            onPress={() => onAlign('centerX')}
-          >
-            <RiAlignItemHorizontalCenterLine />
-          </AlignButton>
-          <AlignButton label="Align right" onPress={() => onAlign('right')}>
-            <RiAlignItemRightLine />
-          </AlignButton>
-          {distribute && (
-            <AlignButton
-              label="Distribute horizontally"
-              onPress={() => onAlign('distributeX')}
+    <div className="island property-island select-island" role="group">
+      <div className="select-actions">
+        {polyline && (
+          <>
+            <ChoiceButton
+              label="Open"
+              pressed={!polyline.closed}
+              onPress={() => onClosed(false)}
             >
-              <DistributeHorizontalIcon />
-            </AlignButton>
-          )}
-          <AlignButton label="Align top" onPress={() => onAlign('top')}>
-            <RiAlignItemTopLine />
-          </AlignButton>
-          <AlignButton
-            label="Center vertically"
-            onPress={() => onAlign('centerY')}
-          >
-            <RiAlignItemVerticalCenterLine />
-          </AlignButton>
-          <AlignButton label="Align bottom" onPress={() => onAlign('bottom')}>
-            <RiAlignItemBottomLine />
-          </AlignButton>
-          {distribute && (
-            <AlignButton
-              label="Distribute vertically"
-              onPress={() => onAlign('distributeY')}
+              <OpenIcon />
+            </ChoiceButton>
+            <ChoiceButton
+              label="Closed"
+              pressed={polyline.closed}
+              onPress={() => onClosed(true)}
             >
-              <DistributeVerticalIcon />
+              <ClosedIcon />
+            </ChoiceButton>
+          </>
+        )}
+        {showDuplicate && (
+          <button
+            type="button"
+            className="action-button"
+            aria-label="Duplicate"
+            onClick={onDuplicate}
+          >
+            <RiFileCopyLine />
+          </button>
+        )}
+        {showGroup && (
+          <button
+            type="button"
+            className="action-button"
+            aria-label="Group"
+            onClick={onGroup}
+          >
+            <RiMergeCellsHorizontal />
+          </button>
+        )}
+        {showUngroup && (
+          <button
+            type="button"
+            className="action-button"
+            aria-label="Ungroup"
+            onClick={onUngroup}
+          >
+            <RiSplitCellsHorizontal />
+          </button>
+        )}
+        {lock && (
+          <button
+            type="button"
+            className="action-button"
+            aria-label={lock === 'locked' ? 'Unlock' : 'Lock'}
+            onClick={onLock}
+          >
+            {lock === 'locked' ? <RiLockLine /> : <RiLockUnlockLine />}
+          </button>
+        )}
+        <button
+          type="button"
+          className="delete-button"
+          aria-label="Delete"
+          onClick={onDelete}
+        >
+          <RiDeleteBinLine />
+        </button>
+        {showAlign && (
+          <>
+            <AlignButton label="Align left" onPress={() => onAlign('left')}>
+              <RiAlignItemLeftLine />
             </AlignButton>
-          )}
-        </>
-      )}
+            <AlignButton
+              label="Center horizontally"
+              onPress={() => onAlign('centerX')}
+            >
+              <RiAlignItemHorizontalCenterLine />
+            </AlignButton>
+            <AlignButton label="Align right" onPress={() => onAlign('right')}>
+              <RiAlignItemRightLine />
+            </AlignButton>
+            {distribute && (
+              <AlignButton
+                label="Distribute horizontally"
+                onPress={() => onAlign('distributeX')}
+              >
+                <DistributeHorizontalIcon />
+              </AlignButton>
+            )}
+            <AlignButton label="Align top" onPress={() => onAlign('top')}>
+              <RiAlignItemTopLine />
+            </AlignButton>
+            <AlignButton
+              label="Center vertically"
+              onPress={() => onAlign('centerY')}
+            >
+              <RiAlignItemVerticalCenterLine />
+            </AlignButton>
+            <AlignButton label="Align bottom" onPress={() => onAlign('bottom')}>
+              <RiAlignItemBottomLine />
+            </AlignButton>
+            {distribute && (
+              <AlignButton
+                label="Distribute vertically"
+                onPress={() => onAlign('distributeY')}
+              >
+                <DistributeVerticalIcon />
+              </AlignButton>
+            )}
+          </>
+        )}
+      </div>
       {layerAssign && (
         <div className="layer-assign">
           {layerAssign.layers.map((layer) => (
@@ -388,11 +393,11 @@ export function SelectIsland({
               key={layer.id}
               type="button"
               className="layer-assign-button"
+              aria-label={layer.name}
               aria-pressed={layer.id === layerAssign.sharedLayerId}
+              style={{ background: layer.color }}
               onClick={() => layerAssign.onAssign(layer.id)}
-            >
-              {layer.name}
-            </button>
+            />
           ))}
         </div>
       )}
@@ -410,6 +415,7 @@ export function LayerIsland({
   onDelete,
 }: LayerIslandProps) {
   const [editingId, setEditingId] = useState<string>()
+  const [nameAtLimit, setNameAtLimit] = useState(false)
   const [colorId, setColorId] = useState<string>()
   const [deleteId, setDeleteId] = useState<string>()
   const skipBlur = useRef(false)
@@ -454,11 +460,20 @@ export function LayerIsland({
             >
               {editingId === layer.id ? (
                 <input
-                  className="layer-name-input"
+                  className={
+                    nameAtLimit
+                      ? 'layer-name-input layer-name-at-limit'
+                      : 'layer-name-input'
+                  }
                   aria-label={`Rename ${layer.name}`}
                   maxLength={layerNameLimit}
                   defaultValue={layer.name}
                   autoFocus
+                  onInput={(event) => {
+                    setNameAtLimit(
+                      event.currentTarget.value.length === layerNameLimit,
+                    )
+                  }}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' && event.key !== 'Escape') {
                       return
@@ -492,6 +507,7 @@ export function LayerIsland({
                   onDoubleClick={() => {
                     setColorId(undefined)
                     setDeleteId(undefined)
+                    setNameAtLimit(layer.name.length === layerNameLimit)
                     setEditingId(layer.id)
                   }}
                 >
@@ -643,6 +659,7 @@ type ImportToastProps = {
 
 type MenuIslandProps = {
   open: boolean
+  layersOpen: boolean
   onToggle: () => void
   onImportSvg: () => void
   onExportGcode: () => void

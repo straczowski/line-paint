@@ -5,6 +5,7 @@ import type { Polyline } from '../scene/polyline'
 import { commitDrawing } from './history'
 import type { CommitDrawing, DrawingEditor, DrawingStep } from './history'
 import {
+  backspaceEditsField,
   duplicateSelection,
   groupSelection,
   isCommandUndo,
@@ -63,6 +64,14 @@ describe('Command+Z', () => {
     expect(isCommandUndo({ ...commandZ, metaKey: false })).toBe(false)
     expect(undoCommittedDrawing(moved.past, true)).toBeUndefined()
     expect(undoCommittedDrawing(moved.past, false)?.step).toEqual(drawing)
+  })
+})
+
+describe('Backspace in the rename field', () => {
+  it('leaves the selection and any selected point in place', () => {
+    expect(backspaceEditsField({ tagName: 'INPUT' })).toBe(true)
+    expect(backspaceEditsField({ tagName: 'BUTTON' })).toBe(false)
+    expect(backspaceEditsField(null)).toBe(false)
   })
 })
 

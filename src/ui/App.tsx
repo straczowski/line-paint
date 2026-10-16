@@ -564,6 +564,7 @@ export function App() {
       <div className="menu-anchor">
         <MenuIsland
           open={menuOpen}
+          layersOpen={layersOpen}
           onToggle={() => setMenuOpen((open) => !open)}
           onImportSvg={chooseSvgFile}
           onExportGcode={() => {
