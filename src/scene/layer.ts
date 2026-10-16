@@ -134,10 +134,10 @@ export function penLayer(layers: readonly Layer[], id: string): Layer {
 
 export function sharedLayerId(
   scene: readonly Polyline[],
-  ids: readonly string[],
+  ids: ReadonlySet<string>,
   layers: readonly Layer[],
 ): string | undefined {
-  const selected = scene.filter((polyline) => ids.includes(polyline.id))
+  const selected = scene.filter((polyline) => ids.has(polyline.id))
   const first = selected[0]
   if (!first) {
     return undefined

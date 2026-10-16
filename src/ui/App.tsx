@@ -530,7 +530,7 @@ export function App() {
     tool === 'select' && selectedPolylines && layers.length > 1
       ? {
           layers,
-          sharedLayerId: sharedLayerId(scene, selectedIds, layers),
+          sharedLayerId: sharedLayerId(scene, selectedIdSet, layers),
           onAssign: assignSelection,
         }
       : undefined

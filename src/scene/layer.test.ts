@@ -3,6 +3,7 @@ import {
   addLayer,
   assignPolylines,
   defaultLayers,
+  sharedLayerId,
   deleteLayer,
   renameLayer,
   recolorLayer,
@@ -110,6 +111,19 @@ describe('layers', () => {
     expect(next[1]?.layerId).toBe('red')
     expect(next[2]).toBe(scene[2])
     expect(assignPolylines(next, ['a', 'b', 'c'], layers, 'red')).toBe(next)
+  })
+
+  it('marks a selection that sits on one layer', () => {
+    const layers = [layer('red', 'Red', '#e03131'), bottom]
+    const scene = [
+      line('a', 'red', undefined, '#e03131'),
+      line('b', 'default'),
+      line('c', 'red', undefined, '#e03131'),
+    ]
+
+    expect(sharedLayerId(scene, new Set(['a', 'c']), layers)).toBe('red')
+    expect(sharedLayerId(scene, new Set(['a', 'b']), layers)).toBeUndefined()
+    expect(sharedLayerId(scene, new Set(['missing']), layers)).toBeUndefined()
   })
 
   it('resets every polyline onto the black Default layer', () => {
