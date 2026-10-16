@@ -8,6 +8,7 @@ import {
   groupIdsToRenew,
   groupPolylines,
   nextDuplicateDelta,
+  ungroupChangesScene,
   ungroupPolylines,
 } from '../scene/selection'
 import type { PointDelete } from '../scene/selection'
@@ -232,7 +233,7 @@ export function selectionGroupActions(
   return {
     group:
       groupPolylines(scene, { ...change, groupId: offeredGroupId }) !== scene,
-    ungroup: ungroupPolylines(scene, change) !== scene,
+    ungroup: ungroupChangesScene(scene, change),
   }
 }
 

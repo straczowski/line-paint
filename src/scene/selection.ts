@@ -36,6 +36,72 @@ export function selectionBounds(
   return outsetBounds(bounds, selectionOutsetAt(zoom))
 }
 
+export function selectionFrameOf(
+  scene: readonly Polyline[],
+  ids: readonly string[],
+  zoom: number,
+  extraPoints: readonly Point[] = [],
+): SelectionFrame | undefined {
+  const selected = new Set(ids)
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let widthMm = 0
+  let seen = false
+  for (const polyline of scene) {
+    if (!selected.has(polyline.id)) {
+      continue
+    }
+    if (polyline.widthMm > widthMm) {
+      widthMm = polyline.widthMm
+    }
+    for (const point of polyline.points) {
+      seen = true
+      minX = Math.min(minX, point.x)
+      maxX = Math.max(maxX, point.x)
+      minY = Math.min(minY, point.y)
+      maxY = Math.max(maxY, point.y)
+    }
+  }
+  for (const point of extraPoints) {
+    seen = true
+    minX = Math.min(minX, point.x)
+    maxX = Math.max(maxX, point.x)
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+  }
+  if (!seen) {
+    return undefined
+  }
+
+  const tight = { minX, maxX, minY, maxY }
+  return {
+    tight,
+    bounds: outsetBounds(tight, selectionOutsetAt(zoom)),
+    center: {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+    },
+    widthMm,
+  }
+}
+
+export function translateSelectionFrame(
+  frame: SelectionFrame,
+  delta: Point,
+): SelectionFrame {
+  return {
+    tight: shiftRectangle(frame.tight, delta),
+    bounds: shiftRectangle(frame.bounds, delta),
+    center: {
+      x: frame.center.x + delta.x,
+      y: frame.center.y + delta.y,
+    },
+    widthMm: frame.widthMm,
+  }
+}
+
 export function translatePolylines(
   scene: readonly Polyline[],
   move: PolylineMove,
@@ -125,6 +191,22 @@ export function groupPolylines(
   return changed ? next : scene
 }
 
+export function ungroupChangesScene(
+  scene: readonly Polyline[],
+  change: PolylineUngroup,
+): boolean {
+  const selected = new Set(change.ids)
+  for (const polyline of scene) {
+    if (!selected.has(polyline.id)) {
+      continue
+    }
+    if (groupIdsWithoutOuter(groupIdsOf(polyline), change.enteredGroupId)) {
+      return true
+    }
+  }
+  return false
+}
+
 export function ungroupPolylines(
   scene: readonly Polyline[],
   change: PolylineUngroup,
@@ -181,19 +263,36 @@ export function selectionAfterMarquee(
   touchedIds: readonly string[],
   enteredGroupId: string | undefined,
 ): readonly string[] {
+  const byId = new Map(scene.map((polyline) => [polyline.id, polyline]))
+  const groups = new Set<string>()
   const ids: string[] = []
+  const seen = new Set<string>()
   for (const hitId of touchedIds) {
-    const polyline = scene.find((item) => item.id === hitId)
+    const polyline = byId.get(hitId)
     if (!polyline) {
       continue
     }
     if (enteredGroupId && !groupIdsOf(polyline).includes(enteredGroupId)) {
       continue
     }
-    for (const id of unitIds(scene, polyline, enteredGroupId)) {
-      if (!ids.includes(id)) {
-        ids.push(id)
+    const child = childGroupId(polyline, enteredGroupId)
+    if (!child) {
+      if (!seen.has(polyline.id)) {
+        seen.add(polyline.id)
+        ids.push(polyline.id)
       }
+      continue
+    }
+    if (groups.has(child)) {
+      continue
+    }
+    groups.add(child)
+    for (const member of scene) {
+      if (!groupIdsOf(member).includes(child) || seen.has(member.id)) {
+        continue
+      }
+      seen.add(member.id)
+      ids.push(member.id)
     }
   }
   return ids
@@ -469,6 +568,15 @@ function tightBounds(points: readonly Point[]): Rectangle | undefined {
   return { minX, maxX, minY, maxY }
 }
 
+function shiftRectangle(bounds: Rectangle, delta: Point): Rectangle {
+  return {
+    minX: bounds.minX + delta.x,
+    maxX: bounds.maxX + delta.x,
+    minY: bounds.minY + delta.y,
+    maxY: bounds.maxY + delta.y,
+  }
+}
+
 function outsetBounds(bounds: Rectangle, outsetMm: number): Rectangle {
   return {
     minX: bounds.minX - outsetMm,
@@ -490,6 +598,17 @@ function pointHitsPolyline(
   zoom: number,
 ): boolean {
   const slop = hitSlopAt(zoom)
+  const bounds = tightBounds(polyline.points)
+  if (
+    !bounds ||
+    point.x < bounds.minX - slop ||
+    point.x > bounds.maxX + slop ||
+    point.y < bounds.minY - slop ||
+    point.y > bounds.maxY + slop
+  ) {
+    return false
+  }
+
   return segmentsOf(polyline).some(
     (segment) => distanceToSegment(point, segment) <= slop,
   )
@@ -499,6 +618,17 @@ function polylineTouchesRectangle(
   polyline: Polyline,
   bounds: Rectangle,
 ): boolean {
+  const tight = tightBounds(polyline.points)
+  if (
+    !tight ||
+    tight.maxX < bounds.minX ||
+    tight.minX > bounds.maxX ||
+    tight.maxY < bounds.minY ||
+    tight.minY > bounds.maxY
+  ) {
+    return false
+  }
+
   return segmentsOf(polyline).some((segment) =>
     segmentTouchesRectangle(segment, bounds),
   )
@@ -767,7 +897,13 @@ function alreadyOneGroup(
     return false
   }
 
-  const selected = scene.filter((polyline) => change.ids.includes(polyline.id))
+  const chosen = new Set(change.ids)
+  const selected: Polyline[] = []
+  for (const polyline of scene) {
+    if (chosen.has(polyline.id)) {
+      selected.push(polyline)
+    }
+  }
   const first = selected[0]
   if (!first || selected.length !== change.ids.length) {
     return false
@@ -788,7 +924,7 @@ function alreadyOneGroup(
   const members = membersOf(scene, child)
   return (
     members.length === change.ids.length &&
-    members.every((id) => change.ids.includes(id))
+    members.every((id) => chosen.has(id))
   )
 }
 
@@ -1021,6 +1157,13 @@ export type SelectionBounds = {
   maxX: number
   minY: number
   maxY: number
+}
+
+export type SelectionFrame = {
+  tight: SelectionBounds
+  bounds: SelectionBounds
+  center: Point
+  widthMm: number
 }
 
 export type DragHide = {

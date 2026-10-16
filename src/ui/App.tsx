@@ -2,14 +2,22 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
+import {
+  captureSelectionPicture,
+  paintOverlay,
+  paintStaticCanvas,
+} from '../render/paint-sheet'
+import type { HeldPicture } from '../render/paint-sheet'
+import { selectionPicturePadPx } from '../render/selection-picture'
 import { alignObjectCount, alignPolylines } from '../scene/align'
 import type { AlignAction } from '../scene/align'
 import {
+  blueprintCorners,
   deleteBlueprints,
   imagesWithoutIds,
   lockBlueprints,
@@ -35,7 +43,9 @@ import {
   deletePolylines,
   enteredGroupAfterRemoval,
   sceneWithoutHiddenPolylines,
+  selectionFrameOf,
 } from '../scene/selection'
+import type { SelectionFrame } from '../scene/selection'
 import {
   emptyScene,
   fitSheet,
@@ -240,7 +250,17 @@ export function App() {
   const noteBitmap = useCallback(() => {
     setBitmapEpoch((epoch) => epoch + 1)
   }, [])
-  const shownSelection = tool === 'select' ? selectedIds : []
+  const shownSelection = tool === 'select' ? selectedIds : noSelection
+  const selectionFrame = useMemo(
+    () =>
+      selectionFrameOf(
+        scene,
+        shownSelection,
+        zoom,
+        selectedBlueprintCorners(images, shownSelection),
+      ),
+    [images, scene, shownSelection, zoom],
+  )
   useFinishedPicture(
     staticCanvasRef,
     scene,
@@ -266,14 +286,19 @@ export function App() {
       viewport.scale,
       images,
       { kind: shapeKind, fromCenter: commandHeld },
+      selectionFrame,
+      windowSize,
     ),
+    scene,
+    shownSelection,
+    selectionFrame,
     windowSize,
     viewport,
     pen.color,
     noteBitmap,
     bitmapEpoch,
   )
-  useSheetWheel(hostRef, windowSize, setViewport)
+  useSheetWheel(hostRef, windowSize, viewport, setViewport)
   useSheetPointer({
     canvasRef: overlayCanvasRef,
     viewport,
@@ -300,6 +325,7 @@ export function App() {
     setCommandHeld,
     shapeKind,
     pen,
+    selectionFrame,
   })
   const deleteSelection = useCallback(() => {
     const before = drawingRef.current
@@ -487,8 +513,9 @@ export function App() {
       ),
     )
   }
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selectedPolylines = scene.some((polyline) =>
-    selectedIds.includes(polyline.id),
+    selectedIdSet.has(polyline.id),
   )
   const layerAssign =
     tool === 'select' && selectedPolylines && layers.length > 1
@@ -579,7 +606,7 @@ export function App() {
             showAlign={objectCount >= 2}
             distribute={objectCount >= 3}
             showDuplicate={scene.some((polyline) =>
-              selectedIds.includes(polyline.id),
+              selectedIdSet.has(polyline.id),
             )}
             lock={lock}
             onAlign={alignSelected}
@@ -667,22 +694,41 @@ function useFinishedPicture(
 function useOverlayPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   frame: OverlayFrame,
+  scene: Scene,
+  selectedIds: readonly string[],
+  selectionFrame: SelectionFrame | undefined,
   windowSize: WindowSize,
   viewport: SheetFit,
   draftColor: string,
   onBitmap: () => void,
   bitmapEpoch: number,
 ): void {
+  const held = useRef<StoredPicture | undefined>(undefined)
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
       return
     }
 
+    const heldPicture = heldSelectionPicture(
+      held,
+      frame,
+      scene,
+      selectedIds,
+      selectionFrame,
+      viewport,
+    )
+    const gesturePicture = gestureWithoutPicture(
+      frame.gesturePicture,
+      heldPicture,
+    )
     paintOverlay({
       context: requireContext(canvasRef.current, 'Overlay'),
       draftPoints: frame.draftPoints,
       draftColor,
-      preview: frame.preview,
+      preview:
+        gesturePicture?.draw === 'transform' && frame.preview.length === 0
+          ? frame.pictureStrokes
+          : frame.preview,
       bounds: frame.bounds,
       rotatedBounds: frame.rotatedBounds,
       dashed: frame.dashed,
@@ -692,6 +738,8 @@ function useOverlayPicture(
       marquee: frame.marquee,
       handles: frame.handles,
       blueprints: frame.blueprints,
+      gesturePicture,
+      heldPicture,
       onBitmap,
       fit: viewport,
       size: windowSize,
@@ -702,14 +750,79 @@ function useOverlayPicture(
     draftColor,
     frame,
     onBitmap,
+    scene,
+    selectedIds,
+    selectionFrame,
     viewport,
     windowSize,
   ])
 }
 
+function gestureWithoutPicture(
+  gesture: OverlayFrame['gesturePicture'],
+  held: HeldPicture | undefined,
+): OverlayFrame['gesturePicture'] {
+  if (gesture?.draw !== 'picture' || held) {
+    return gesture
+  }
+  if (gesture.kind === 'move') {
+    return { kind: 'move', delta: gesture.delta, draw: 'transform' }
+  }
+  return {
+    kind: 'rotate',
+    center: gesture.center,
+    angle: gesture.angle,
+    draw: 'transform',
+  }
+}
+
+function heldSelectionPicture(
+  held: { current: StoredPicture | undefined },
+  frame: OverlayFrame,
+  scene: Scene,
+  selectedIds: readonly string[],
+  selectionFrame: SelectionFrame | undefined,
+  viewport: SheetFit,
+): HeldPicture | undefined {
+  if (frame.gesturePicture?.draw !== 'picture' || !selectionFrame) {
+    return undefined
+  }
+  const stored = held.current
+  if (
+    stored &&
+    stored.scene === scene &&
+    stored.ids === selectedIds &&
+    stored.scale === viewport.scale &&
+    stored.left === viewport.left &&
+    stored.top === viewport.top
+  ) {
+    return stored.picture
+  }
+
+  const picture = captureSelectionPicture(
+    frame.pictureStrokes,
+    viewport,
+    selectionFrame.tight,
+    selectionPicturePadPx(selectionFrame.widthMm, viewport.scale),
+  )
+  if (!picture) {
+    return undefined
+  }
+  held.current = {
+    scene,
+    ids: selectedIds,
+    scale: viewport.scale,
+    left: viewport.left,
+    top: viewport.top,
+    picture,
+  }
+  return picture
+}
+
 function useSheetWheel(
   hostRef: RefObject<HTMLElement | null>,
   windowSize: WindowSize,
+  viewport: SheetFit,
   setViewport: Dispatch<SetStateAction<SheetFit>>,
 ): void {
   useEffect(() => {
@@ -719,19 +832,36 @@ function useSheetWheel(
     }
 
     const fitScale = fitSheet(windowSize).scale
+    let pending: SheetFit | undefined
+    let frame = 0
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
       const anchor = pointerOnHost(event, host)
-      setViewport((fit) =>
-        event.ctrlKey
-          ? pinchAt(fit, anchor, event.deltaY, fitScale)
-          : panBy(fit, event.deltaX, event.deltaY),
-      )
+      const base = pending ?? viewport
+      pending = event.ctrlKey
+        ? pinchAt(base, anchor, event.deltaY, fitScale)
+        : panBy(base, event.deltaX, event.deltaY)
+      if (frame) {
+        return
+      }
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const next = pending
+        pending = undefined
+        if (next) {
+          setViewport(next)
+        }
+      })
     }
 
     host.addEventListener('wheel', onWheel, { passive: false })
-    return () => host.removeEventListener('wheel', onWheel)
-  }, [hostRef, setViewport, windowSize])
+    return () => {
+      host.removeEventListener('wheel', onWheel)
+      if (frame) {
+        cancelAnimationFrame(frame)
+      }
+    }
+  }, [hostRef, setViewport, viewport, windowSize])
 }
 
 function pointerOnHost(
@@ -745,6 +875,18 @@ function pointerOnHost(
   }
 }
 
+const noSelection: readonly string[] = []
+
+function selectedBlueprintCorners(
+  images: readonly Blueprint[],
+  ids: readonly string[],
+): readonly Point[] {
+  const selected = new Set(ids)
+  return images.flatMap((image) =>
+    selected.has(image.id) ? blueprintCorners(image) : [],
+  )
+}
+
 function lonePolyline(
   scene: Scene,
   selectedIds: readonly string[],
@@ -755,6 +897,15 @@ function lonePolyline(
 
   const id = selectedIds[0]
   return scene.find((polyline) => polyline.id === id)
+}
+
+type StoredPicture = {
+  scene: Scene
+  ids: readonly string[]
+  scale: number
+  left: number
+  top: number
+  picture: HeldPicture
 }
 
 function requireContext(

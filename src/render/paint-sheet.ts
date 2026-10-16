@@ -9,6 +9,7 @@ import { rotateHandleRadiusPx } from '../scene/rotate'
 import { scaleHandleHalfPx } from '../scene/scale'
 import type { SelectionBounds } from '../scene/selection'
 import { sceneYToTop, sheetHeightMm, sheetWidthMm } from '../scene/sheet'
+import { selectionPictureBox } from './selection-picture'
 import type { Scene, SheetFit, WindowSize } from '../scene/sheet'
 
 export function paintStaticCanvas(input: PaintStaticCanvasInput): void {
@@ -51,14 +52,13 @@ export function paintOverlay(input: PaintOverlayInput): void {
     color: input.draftColor ?? defaultPolylineStroke,
     widthMm: defaultPolylineWidthMm,
   })
-  for (const stroke of preview) {
-    paintStroke(context, {
-      points: pointsWithClosingSegment(stroke.points, stroke.closed),
-      fit,
-      color: selectionColor,
-      widthMm: stroke.widthMm,
-    })
-  }
+  paintSelectionPreview(
+    context,
+    preview,
+    input.gesturePicture,
+    input.heldPicture,
+    fit,
+  )
   if (bounds) {
     strokeSelectionBounds(context, { bounds, fit, dashed })
   }
@@ -91,6 +91,106 @@ function clearCanvas(context: SheetContext, size: WindowSize): void {
 
 function clearOverlay(context: SheetContext, size: WindowSize): void {
   context.clearRect(0, 0, size.width, size.height)
+}
+
+function paintSelectionPreview(
+  context: SheetContext,
+  preview: readonly SelectionStroke[],
+  gesture: GesturePicture | undefined,
+  held: HeldPicture | undefined,
+  fit: SheetFit,
+): void {
+  if (gesture?.draw === 'picture' && held) {
+    context.save()
+    applyGestureTransform(context, gesture, fit)
+    context.drawImage(
+      held.canvas,
+      held.originX,
+      held.originY,
+      held.width,
+      held.height,
+    )
+    context.restore()
+    return
+  }
+
+  if (gesture?.draw === 'transform') {
+    context.save()
+    applyGestureTransform(context, gesture, fit)
+    paintAccentStrokes(context, preview, fit)
+    context.restore()
+    return
+  }
+
+  paintAccentStrokes(context, preview, fit)
+}
+
+function paintAccentStrokes(
+  context: SheetContext,
+  preview: readonly SelectionStroke[],
+  fit: SheetFit,
+): void {
+  for (const stroke of preview) {
+    paintStroke(context, {
+      points: pointsWithClosingSegment(stroke.points, stroke.closed),
+      fit,
+      color: selectionColor,
+      widthMm: stroke.widthMm,
+    })
+  }
+}
+
+function applyGestureTransform(
+  context: SheetContext,
+  gesture: GesturePicture,
+  fit: SheetFit,
+): void {
+  if (gesture.kind === 'move') {
+    context.translate(gesture.delta.x * fit.scale, -gesture.delta.y * fit.scale)
+    return
+  }
+
+  const center = scenePointToCanvas(gesture.center, fit)
+  context.translate(center.x, center.y)
+  context.rotate(gesture.angle)
+  context.translate(-center.x, -center.y)
+}
+
+export function captureSelectionPicture(
+  strokes: readonly SelectionStroke[],
+  fit: SheetFit,
+  tight: SelectionBounds,
+  padPx: number,
+): HeldPicture | undefined {
+  if (typeof document === 'undefined') {
+    return undefined
+  }
+
+  const box = selectionPictureBox(tight, fit.scale, fit.left, fit.top, padPx)
+  if (!box) {
+    return undefined
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = box.width
+  canvas.height = box.height
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return undefined
+  }
+
+  paintAccentStrokes(context, strokes, {
+    scale: fit.scale,
+    left: fit.left - box.originX,
+    top: fit.top - box.originY,
+  })
+  return {
+    canvas,
+    originX: box.originX,
+    originY: box.originY,
+    width: box.width,
+    height: box.height,
+  }
 }
 
 function paintSheet(context: SheetContext, fit: SheetFit): void {
@@ -471,9 +571,32 @@ type PaintOverlayInput = {
   handles: readonly Handle[]
   blueprints?: readonly Blueprint[]
   scaleHandlePoints?: readonly Point[]
+  gesturePicture?: GesturePicture
+  heldPicture?: HeldPicture
   onBitmap?: () => void
   fit: SheetFit
   size: WindowSize
+}
+
+export type GesturePicture =
+  | {
+      kind: 'move'
+      delta: Point
+      draw: 'picture' | 'transform'
+    }
+  | {
+      kind: 'rotate'
+      center: Point
+      angle: number
+      draw: 'picture' | 'transform'
+    }
+
+export type HeldPicture = {
+  canvas: CanvasImageSource
+  originX: number
+  originY: number
+  width: number
+  height: number
 }
 
 type Handle = {

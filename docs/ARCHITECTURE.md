@@ -35,6 +35,10 @@ React and the canvases both read this scene. They do not keep a second copy of t
 
 Redraw the static canvas when the scene changes. Redraw the overlay when the selection or the in-progress stroke changes. Do not redraw every finished stroke on each pointer move.
 
+A pointer sample is a delta. It does not search the scene and it does not copy points. A move or a rotate draws a picture of the selected strokes when that picture fits the overlay. The picture is pixels, not a second list of points. It is painted again when the selection, the zoom, or the window changes, and when the gesture ends. A scale paints its preview at the stored pen width, at most once a frame. Pan and zoom paint at most once a frame. The scene stays the geometry. The surface stays Canvas 2D.
+
+A selection is a set. A walk of the scene that asks `includes` on the id list is the scan that locked the page when every imported line was selected. Membership tests use the set. A marquee expands each group once. A selection of more than 512 strokes is the rectangle: those strokes stay on the static canvas in their stored color. The limit is `strokedAccentLimit` in `src/ui/overlay-frame.ts`. A smaller selection still leaves the static canvas and is drawn again on the overlay in `#6965db`. Leave the limit in place. Removing it to satisfy that accent for the large case brings the lock back, unless the accent paint itself stays inside one frame.
+
 ## Modules
 
 - `src/scene/` — elements, viewport math, and edits. These modules must not import React or touch `document`.
@@ -58,6 +62,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Rectangle and ellipse points | `src/scene/shape.ts` |
 | Sheet size, fit, scene Y | `src/scene/sheet.ts` |
 | Pixels | `src/render/paint-sheet.ts` |
+| Selection picture fit | `src/render/selection-picture.ts` |
 | Scene state and canvas hooks | `src/ui/App.tsx` |
 | Pointer gestures | `src/ui/sheet-pointer.ts` |
 | Draft stroke, selection preview, marquee, and handles | `src/ui/overlay-frame.ts` |
