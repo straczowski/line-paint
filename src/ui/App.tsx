@@ -2,20 +2,40 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { paintOverlay, paintStaticCanvas } from '../render/paint-sheet'
+import {
+  captureSelectionPicture,
+  paintOverlay,
+  paintStaticCanvas,
+} from '../render/paint-sheet'
+import type { HeldPicture } from '../render/paint-sheet'
+import { selectionPicturePadPx } from '../render/selection-picture'
 import { alignObjectCount, alignPolylines } from '../scene/align'
 import type { AlignAction } from '../scene/align'
 import {
+  blueprintCorners,
   deleteBlueprints,
   imagesWithoutIds,
   lockBlueprints,
 } from '../scene/blueprint'
 import type { Blueprint } from '../scene/blueprint'
-import { gcodeDocument, svgDocument } from '../scene/export'
+import { gcodeFiles, svgDocument } from '../scene/export'
+import {
+  addLayer,
+  assignPolylines,
+  defaultLayerId,
+  defaultLayers,
+  deleteLayer,
+  penLayer,
+  renameLayer,
+  recolorLayer,
+  resetLayers,
+  sharedLayerId,
+} from '../scene/layer'
 import type { ImportedPolyline } from '../scene/import'
 import { commitPolyline, setPolylineClosed } from '../scene/polyline'
 import type { Point, Polyline } from '../scene/polyline'
@@ -24,7 +44,9 @@ import {
   deletePolylines,
   enteredGroupAfterRemoval,
   sceneWithoutHiddenPolylines,
+  selectionFrameOf,
 } from '../scene/selection'
+import type { SelectionFrame } from '../scene/selection'
 import {
   emptyScene,
   fitSheet,
@@ -59,6 +81,7 @@ import {
 import {
   FinishIsland,
   ImportToast,
+  LayerIsland,
   MenuIsland,
   NavigationIsland,
   SelectIsland,
@@ -82,6 +105,9 @@ export function App() {
   const [follower, setFollower] = useState<Point>()
   const [tool, setTool] = useState<Tool>('polyline')
   const [shapeKind, setShapeKind] = useState<ShapeKind>('rectangle')
+  const [layers, setLayers] = useState(defaultLayers)
+  const [activeLayerId, setActiveLayerId] = useState(defaultLayerId)
+  const [layersOpen, setLayersOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [enteredGroupId, setEnteredGroupId] = useState<string>()
@@ -105,6 +131,7 @@ export function App() {
   const drawingRef = useRef<DrawingStep>({
     scene,
     images,
+    layers,
     selectedIds,
     enteredGroupId,
     pointEdit,
@@ -114,14 +141,23 @@ export function App() {
     drawingRef.current = {
       scene,
       images,
+      layers,
       selectedIds,
       enteredGroupId,
       pointEdit,
       duplicateDelta,
     }
-  }, [duplicateDelta, enteredGroupId, images, pointEdit, scene, selectedIds])
+  }, [
+    duplicateDelta,
+    enteredGroupId,
+    images,
+    layers,
+    pointEdit,
+    scene,
+    selectedIds,
+  ])
   const commitScene: CommitDrawing = useCallback(
-    (nextScene, editor, nextImages) => {
+    (nextScene, editor, nextImages, nextLayers) => {
       const before = drawingRef.current
       const sceneAfter =
         typeof nextScene === 'function' ? nextScene(before.scene) : nextScene
@@ -137,6 +173,7 @@ export function App() {
         sceneAfter,
         editor,
         imagesAfter,
+        nextLayers,
       )
       if (!result.recorded && !editor) {
         return
@@ -145,6 +182,7 @@ export function App() {
         pastRef.current = result.past
         setScene(result.step.scene)
         setImages(result.step.images)
+        setLayers(result.step.layers)
       }
       drawingRef.current = result.step
       if (!editor) {
@@ -162,6 +200,12 @@ export function App() {
     drawingRef.current = undone.step
     setScene(undone.step.scene)
     setImages(undone.step.images)
+    setLayers(undone.step.layers)
+    setActiveLayerId((current) =>
+      undone.step.layers.some((layer) => layer.id === current)
+        ? current
+        : penLayer(undone.step.layers, current).id,
+    )
     setSelectedIds(undone.step.selectedIds)
     setEnteredGroupId(undone.step.enteredGroupId)
     setPointEdit(undone.step.pointEdit)
@@ -172,11 +216,15 @@ export function App() {
     setDraftPoints([])
     setFollower(undefined)
   }
+  const pen = penLayer(layers, activeLayerId)
   const finishDraft = () => {
+    const ink = penLayer(drawingRef.current.layers, activeLayerId)
     commitScene((current) =>
       commitPolyline(current, {
         id: crypto.randomUUID(),
         points: draftPoints,
+        stroke: ink.color,
+        layerId: ink.id,
       }),
     )
     clearDraft()
@@ -203,7 +251,17 @@ export function App() {
   const noteBitmap = useCallback(() => {
     setBitmapEpoch((epoch) => epoch + 1)
   }, [])
-  const shownSelection = tool === 'select' ? selectedIds : []
+  const shownSelection = tool === 'select' ? selectedIds : noSelection
+  const selectionFrame = useMemo(
+    () =>
+      selectionFrameOf(
+        scene,
+        shownSelection,
+        zoom,
+        selectedBlueprintCorners(images, shownSelection),
+      ),
+    [images, scene, shownSelection, zoom],
+  )
   useFinishedPicture(
     staticCanvasRef,
     scene,
@@ -229,13 +287,19 @@ export function App() {
       viewport.scale,
       images,
       { kind: shapeKind, fromCenter: commandHeld },
+      selectionFrame,
+      windowSize,
     ),
+    scene,
+    shownSelection,
+    selectionFrame,
     windowSize,
     viewport,
+    pen.color,
     noteBitmap,
     bitmapEpoch,
   )
-  useSheetWheel(hostRef, windowSize, setViewport)
+  useSheetWheel(hostRef, windowSize, viewport, setViewport)
   useSheetPointer({
     canvasRef: overlayCanvasRef,
     viewport,
@@ -261,6 +325,8 @@ export function App() {
     setAltHeld,
     setCommandHeld,
     shapeKind,
+    pen,
+    selectionFrame,
   })
   const deleteSelection = useCallback(() => {
     const before = drawingRef.current
@@ -358,12 +424,20 @@ export function App() {
   }
 
   const applyImportedSvg = (polylines: readonly ImportedPolyline[]) => {
-    commitScene(appendImportedPolylines(drawingRef.current.scene, polylines), {
-      selectedIds: [],
-      enteredGroupId: undefined,
-      duplicateDelta: undefined,
-      pointEdit: undefined,
-    })
+    const drawing = drawingRef.current
+    commitScene(
+      appendImportedPolylines(
+        drawing.scene,
+        polylines,
+        penLayer(drawing.layers, activeLayerId),
+      ),
+      {
+        selectedIds: [],
+        enteredGroupId: undefined,
+        duplicateDelta: undefined,
+        pointEdit: undefined,
+      },
+    )
     clearDraft()
     gestureRef.current = undefined
     setGesture(undefined)
@@ -388,6 +462,78 @@ export function App() {
     setGesture(undefined)
     importToast.hide()
   }
+  const choosePen = (layerId: string) => {
+    setActiveLayerId(layerId)
+  }
+  const addLayerPen = () => {
+    const id = crypto.randomUUID()
+    const drawing = drawingRef.current
+    commitScene(
+      drawing.scene,
+      undefined,
+      undefined,
+      addLayer(drawing.layers, id),
+    )
+    setActiveLayerId(id)
+  }
+  const renameLayerPen = (layerId: string, name: string) => {
+    const drawing = drawingRef.current
+    const next = renameLayer(drawing.layers, layerId, name)
+    if (next === drawing.layers) {
+      return
+    }
+    commitScene(drawing.scene, undefined, undefined, next)
+  }
+  const recolorLayerPen = (layerId: string, color: string) => {
+    const drawing = drawingRef.current
+    const next = recolorLayer(drawing.layers, drawing.scene, layerId, color)
+    if (next.layers === drawing.layers && next.scene === drawing.scene) {
+      return
+    }
+    commitScene(next.scene, undefined, undefined, next.layers)
+  }
+  const deleteLayerPen = (layerId: string) => {
+    const drawing = drawingRef.current
+    const removed = deleteLayer(drawing.layers, drawing.scene, layerId)
+    if (!removed) {
+      return
+    }
+    commitScene(removed.scene, undefined, undefined, removed.layers)
+    setActiveLayerId((current) =>
+      current === layerId ? removed.receiverId : current,
+    )
+  }
+  const assignSelection = (layerId: string) => {
+    const drawing = drawingRef.current
+    commitScene(
+      assignPolylines(
+        drawing.scene,
+        drawing.selectedIds,
+        drawing.layers,
+        layerId,
+      ),
+    )
+  }
+  const deactivateLayers = () => {
+    const drawing = drawingRef.current
+    const next = resetLayers(drawing.layers, drawing.scene)
+    commitScene(next.scene, undefined, undefined, next.layers)
+    setActiveLayerId(defaultLayerId)
+    setLayersOpen(false)
+    setMenuOpen(false)
+  }
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const selectedPolylines = scene.some((polyline) =>
+    selectedIdSet.has(polyline.id),
+  )
+  const layerAssign =
+    tool === 'select' && selectedPolylines && layers.length > 1
+      ? {
+          layers,
+          sharedLayerId: sharedLayerId(scene, selectedIdSet, layers),
+          onAssign: assignSelection,
+        }
+      : undefined
   const chooseSvgFile = () => {
     setMenuOpen(false)
     svgInputRef.current?.click()
@@ -427,14 +573,21 @@ export function App() {
       <div className="menu-anchor">
         <MenuIsland
           open={menuOpen}
+          layersOpen={layersOpen}
           onToggle={() => setMenuOpen((open) => !open)}
           onImportSvg={chooseSvgFile}
           onExportGcode={() => {
-            downloadTextFile(
-              'drawing.gcode',
-              gcodeDocument(scene),
-              'text/plain',
-            )
+            for (const file of gcodeFiles(scene, layers)) {
+              downloadTextFile(file.name, file.text, 'text/plain')
+            }
+            setMenuOpen(false)
+          }}
+          onLayers={() => {
+            if (layersOpen) {
+              deactivateLayers()
+              return
+            }
+            setLayersOpen(true)
             setMenuOpen(false)
           }}
           onExportSvg={() => {
@@ -467,14 +620,26 @@ export function App() {
             showAlign={objectCount >= 2}
             distribute={objectCount >= 3}
             showDuplicate={scene.some((polyline) =>
-              selectedIds.includes(polyline.id),
+              selectedIdSet.has(polyline.id),
             )}
             lock={lock}
             onAlign={alignSelected}
             onLock={lockSelected}
+            layerAssign={layerAssign}
           />
         )}
       </div>
+      {layersOpen && (
+        <LayerIsland
+          layers={layers}
+          activeLayerId={pen.id}
+          onChoose={choosePen}
+          onAdd={addLayerPen}
+          onRename={renameLayerPen}
+          onRecolor={recolorLayerPen}
+          onDelete={deleteLayerPen}
+        />
+      )}
       <NavigationIsland
         percent={zoomPercent(viewport.scale, fitSheet(windowSize).scale)}
         onResetZoom={() => setViewport((fit) => resetZoom(fit, windowSize))}
@@ -543,20 +708,41 @@ function useFinishedPicture(
 function useOverlayPicture(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   frame: OverlayFrame,
+  scene: Scene,
+  selectedIds: readonly string[],
+  selectionFrame: SelectionFrame | undefined,
   windowSize: WindowSize,
   viewport: SheetFit,
+  draftColor: string,
   onBitmap: () => void,
   bitmapEpoch: number,
 ): void {
+  const held = useRef<StoredPicture | undefined>(undefined)
   useLayoutEffect(() => {
     if (windowSize.width <= 0 || windowSize.height <= 0) {
       return
     }
 
+    const heldPicture = heldSelectionPicture(
+      held,
+      frame,
+      scene,
+      selectedIds,
+      selectionFrame,
+      viewport,
+    )
+    const gesturePicture = gestureWithoutPicture(
+      frame.gesturePicture,
+      heldPicture,
+    )
     paintOverlay({
       context: requireContext(canvasRef.current, 'Overlay'),
       draftPoints: frame.draftPoints,
-      preview: frame.preview,
+      draftColor,
+      preview:
+        gesturePicture?.draw === 'transform' && frame.preview.length === 0
+          ? frame.pictureStrokes
+          : frame.preview,
       bounds: frame.bounds,
       rotatedBounds: frame.rotatedBounds,
       dashed: frame.dashed,
@@ -566,16 +752,91 @@ function useOverlayPicture(
       marquee: frame.marquee,
       handles: frame.handles,
       blueprints: frame.blueprints,
+      gesturePicture,
+      heldPicture,
       onBitmap,
       fit: viewport,
       size: windowSize,
     })
-  }, [bitmapEpoch, canvasRef, frame, onBitmap, viewport, windowSize])
+  }, [
+    bitmapEpoch,
+    canvasRef,
+    draftColor,
+    frame,
+    onBitmap,
+    scene,
+    selectedIds,
+    selectionFrame,
+    viewport,
+    windowSize,
+  ])
+}
+
+function gestureWithoutPicture(
+  gesture: OverlayFrame['gesturePicture'],
+  held: HeldPicture | undefined,
+): OverlayFrame['gesturePicture'] {
+  if (gesture?.draw !== 'picture' || held) {
+    return gesture
+  }
+  if (gesture.kind === 'move') {
+    return { kind: 'move', delta: gesture.delta, draw: 'transform' }
+  }
+  return {
+    kind: 'rotate',
+    center: gesture.center,
+    angle: gesture.angle,
+    draw: 'transform',
+  }
+}
+
+function heldSelectionPicture(
+  held: { current: StoredPicture | undefined },
+  frame: OverlayFrame,
+  scene: Scene,
+  selectedIds: readonly string[],
+  selectionFrame: SelectionFrame | undefined,
+  viewport: SheetFit,
+): HeldPicture | undefined {
+  if (frame.gesturePicture?.draw !== 'picture' || !selectionFrame) {
+    return undefined
+  }
+  const stored = held.current
+  if (
+    stored &&
+    stored.scene === scene &&
+    stored.ids === selectedIds &&
+    stored.scale === viewport.scale &&
+    stored.left === viewport.left &&
+    stored.top === viewport.top
+  ) {
+    return stored.picture
+  }
+
+  const picture = captureSelectionPicture(
+    frame.pictureStrokes,
+    viewport,
+    selectionFrame.tight,
+    selectionPicturePadPx(selectionFrame.widthMm, viewport.scale),
+  )
+  if (!picture) {
+    return undefined
+  }
+  held.current = {
+    scene,
+    ids: selectedIds,
+    scale: viewport.scale,
+    left: viewport.left,
+    top: viewport.top,
+    picture,
+  }
+  return picture
 }
 
 function useSheetWheel(
   hostRef: RefObject<HTMLElement | null>,
   windowSize: WindowSize,
+  viewport: SheetFit,
   setViewport: Dispatch<SetStateAction<SheetFit>>,
 ): void {
   useEffect(() => {
@@ -585,19 +846,36 @@ function useSheetWheel(
     }
 
     const fitScale = fitSheet(windowSize).scale
+    let pending: SheetFit | undefined
+    let frame = 0
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
       const anchor = pointerOnHost(event, host)
-      setViewport((fit) =>
-        event.ctrlKey
-          ? pinchAt(fit, anchor, event.deltaY, fitScale)
-          : panBy(fit, event.deltaX, event.deltaY),
-      )
+      const base = pending ?? viewport
+      pending = event.ctrlKey
+        ? pinchAt(base, anchor, event.deltaY, fitScale)
+        : panBy(base, event.deltaX, event.deltaY)
+      if (frame) {
+        return
+      }
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const next = pending
+        pending = undefined
+        if (next) {
+          setViewport(next)
+        }
+      })
     }
 
     host.addEventListener('wheel', onWheel, { passive: false })
-    return () => host.removeEventListener('wheel', onWheel)
-  }, [hostRef, setViewport, windowSize])
+    return () => {
+      host.removeEventListener('wheel', onWheel)
+      if (frame) {
+        cancelAnimationFrame(frame)
+      }
+    }
+  }, [hostRef, setViewport, viewport, windowSize])
 }
 
 function pointerOnHost(
@@ -611,6 +889,18 @@ function pointerOnHost(
   }
 }
 
+const noSelection: readonly string[] = []
+
+function selectedBlueprintCorners(
+  images: readonly Blueprint[],
+  ids: readonly string[],
+): readonly Point[] {
+  const selected = new Set(ids)
+  return images.flatMap((image) =>
+    selected.has(image.id) ? blueprintCorners(image) : [],
+  )
+}
+
 function lonePolyline(
   scene: Scene,
   selectedIds: readonly string[],
@@ -621,6 +911,15 @@ function lonePolyline(
 
   const id = selectedIds[0]
   return scene.find((polyline) => polyline.id === id)
+}
+
+type StoredPicture = {
+  scene: Scene
+  ids: readonly string[]
+  scale: number
+  left: number
+  top: number
+  picture: HeldPicture
 }
 
 function requireContext(

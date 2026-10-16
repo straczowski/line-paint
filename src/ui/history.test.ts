@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { defaultLayers, resetLayers } from '../scene/layer'
+import type { Layer } from '../scene/layer'
 import type { Point, Polyline } from '../scene/polyline'
 import type { Scene } from '../scene/sheet'
 import { commitDrawing, undoDrawing } from './history'
@@ -108,6 +110,81 @@ describe('commitDrawing', () => {
         .recorded,
     ).toBe(false)
   })
+
+  it('records a layer rename that leaves the polylines alone', () => {
+    const current = step([])
+    const renamed = current.layers.map((layer) =>
+      layer.id === 'default' ? { ...layer, name: 'Ink' } : layer,
+    )
+    const committed = commitDrawing(
+      [],
+      current,
+      current.scene,
+      undefined,
+      undefined,
+      renamed,
+    )
+    const undone = undoDrawing(committed.past)
+
+    expect(committed.recorded).toBe(true)
+    expect(committed.step.layers[0]?.name).toBe('Ink')
+    expect(undone?.step.layers).toEqual(current.layers)
+    expect(
+      commitDrawing(
+        [],
+        committed.step,
+        committed.step.scene,
+        undefined,
+        undefined,
+        committed.step.layers,
+      ).recorded,
+    ).toBe(false)
+  })
+
+  it('records a layer reset and skips one that is already Default', () => {
+    const layers: readonly Layer[] = [
+      { id: 'red', name: 'Red', color: '#e03131' },
+      { id: 'default', name: 'Default', color: '#1e1e1e' },
+    ]
+    const scene = [
+      {
+        ...line('a', 0),
+        layerId: 'red',
+        stroke: '#e03131',
+      },
+    ]
+    const current = { ...step(scene), layers }
+    const reset = resetLayers(layers, scene)
+    const committed = commitDrawing(
+      [],
+      current,
+      reset.scene,
+      undefined,
+      undefined,
+      reset.layers,
+    )
+    const undone = undoDrawing(committed.past)
+    const again = resetLayers(committed.step.layers, committed.step.scene)
+    const skipped = commitDrawing(
+      committed.past,
+      committed.step,
+      again.scene,
+      undefined,
+      undefined,
+      again.layers,
+    )
+
+    expect(committed.recorded).toBe(true)
+    expect(committed.step.layers).toEqual(defaultLayers())
+    expect(committed.step.scene[0]).toMatchObject({
+      layerId: 'default',
+      stroke: '#1e1e1e',
+    })
+    expect(undone?.step.layers).toEqual(layers)
+    expect(undone?.step.scene).toEqual(scene)
+    expect(skipped.recorded).toBe(false)
+    expect(skipped.past).toBe(committed.past)
+  })
 })
 
 function step(
@@ -118,6 +195,7 @@ function step(
   return {
     scene,
     images: [],
+    layers: defaultLayers(),
     selectedIds,
     enteredGroupId: undefined,
     pointEdit: undefined,

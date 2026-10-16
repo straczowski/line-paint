@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
+import type { Layer } from '../scene/layer'
 import { commitPolyline } from '../scene/polyline'
 import type { Point } from '../scene/polyline'
 import { shapePoints } from '../scene/shape'
@@ -29,15 +30,14 @@ import {
   selectionAfterClick,
   selectionAfterDoubleClick,
   selectionAfterMarquee,
-  selectionBounds,
   touchedPolylineIds,
   translatePolylines,
 } from '../scene/selection'
+import type { SelectionFrame } from '../scene/selection'
 import { dragDelta, draftPoint, draggedHandle } from '../scene/ruler'
 import {
   rotateHandleAt,
   rotatePolylines,
-  selectionCenter,
   signedAngle,
   unwrapAngle,
 } from '../scene/rotate'
@@ -77,12 +77,37 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setAltHeld,
     setCommandHeld,
     shapeKind,
+    pen,
+    selectionFrame,
   } = input
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) {
       return
+    }
+
+    let pendingSample: SelectGesture | undefined
+    let sampleFrame = 0
+    const setGestureNow = (gesture: SelectGesture | undefined) => {
+      pendingSample = undefined
+      if (sampleFrame) {
+        cancelAnimationFrame(sampleFrame)
+        sampleFrame = 0
+      }
+      setGesture(gesture)
+    }
+    const setGestureSample = (gesture: SelectGesture) => {
+      pendingSample = gesture
+      if (sampleFrame) {
+        return
+      }
+      sampleFrame = requestAnimationFrame(() => {
+        sampleFrame = 0
+        const next = pendingSample
+        pendingSample = undefined
+        setGesture(next)
+      })
     }
 
     const sheetPointer = {
@@ -105,11 +130,14 @@ export function useSheetPointer(input: SheetPointerInput): void {
       setEnteredGroupId,
       setDuplicateDelta,
       setPointEdit,
-      setGesture,
+      setGesture: setGestureNow,
+      setGestureSample,
+      selectionFrame,
       setShiftHeld,
       setAltHeld,
       setCommandHeld,
       shapeKind,
+      pen,
     }
     const onPointerDown = (event: PointerEvent) => {
       beginSheetPointer(canvas, event, sheetPointer)
@@ -121,7 +149,7 @@ export function useSheetPointer(input: SheetPointerInput): void {
       endSheetPointer(event, sheetPointer)
     }
     const onPointerCancel = (event: PointerEvent) => {
-      cancelSheetPointer(event, gestureRef, setGesture)
+      cancelSheetPointer(event, gestureRef, setGestureNow)
     }
     const onDoubleClick = (event: MouseEvent) => {
       beginPointEdit(canvas, event, sheetPointer)
@@ -133,6 +161,9 @@ export function useSheetPointer(input: SheetPointerInput): void {
     window.addEventListener('pointerup', onPointerUp)
     window.addEventListener('pointercancel', onPointerCancel)
     return () => {
+      if (sampleFrame) {
+        cancelAnimationFrame(sampleFrame)
+      }
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('dblclick', onDoubleClick)
       window.removeEventListener('pointermove', onPointerMove)
@@ -161,9 +192,11 @@ export function useSheetPointer(input: SheetPointerInput): void {
     setShiftHeld,
     setCommandHeld,
     shapeKind,
+    pen,
     tool,
     viewport,
     zoom,
+    selectionFrame,
   ])
 }
 
@@ -362,7 +395,12 @@ function moveSheetPointer(
   )
   if (next.gesture !== gesture || next.selectedIds !== input.selectedIds) {
     input.gestureRef.current = next.gesture
-    input.setGesture(next.gesture)
+    const selectionChanged = next.selectedIds !== input.selectedIds
+    if (selectionChanged || !input.setGestureSample) {
+      input.setGesture(next.gesture)
+    } else {
+      input.setGestureSample(next.gesture)
+    }
     if (next.selectedIds !== input.selectedIds) {
       replaceSelection(input, next.selectedIds)
       input.setPointEdit(undefined)
@@ -712,6 +750,8 @@ function finishShape(
       id: crypto.randomUUID(),
       points,
       closed: true,
+      stroke: input.pen.color,
+      layerId: input.pen.id,
     }),
   )
 }
@@ -719,7 +759,7 @@ function finishShape(
 function cancelSheetPointer(
   event: PointerEvent,
   gestureRef: RefObject<SelectGesture | undefined>,
-  setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>,
+  setGesture: (gesture: SelectGesture | undefined) => void,
 ): void {
   const gesture = gestureRef.current
   if (!gesture || gesture.pointerId !== event.pointerId) {
@@ -887,9 +927,15 @@ function scaleInput(
 }
 
 function pointsIn(scene: Scene, ids: readonly string[]): readonly Point[] {
-  return scene.flatMap((polyline) =>
-    ids.includes(polyline.id) ? polyline.points : [],
-  )
+  const selected = new Set(ids)
+  const points: Point[] = []
+  for (const polyline of scene) {
+    if (!selected.has(polyline.id)) {
+      continue
+    }
+    points.push(...polyline.points)
+  }
+  return points
 }
 
 function rotateCenterUnderPointer(
@@ -915,17 +961,12 @@ function rotateCenterUnderPointer(
     return undefined
   }
 
-  const points = [
-    ...pointsIn(input.scene, input.selectedIds),
-    ...blueprintPoints(input.images, input.selectedIds),
-  ]
-  const bounds = selectionBounds(points, input.zoom)
-  const center = selectionCenter(points)
-  if (!bounds || !center || !rotateHandleAt(bounds, point, pixelsPerMm)) {
+  const frame = input.selectionFrame
+  if (!frame || !rotateHandleAt(frame.bounds, point, pixelsPerMm)) {
     return undefined
   }
 
-  return center
+  return frame.center
 }
 
 function scaleHandleUnderPointer(
@@ -949,13 +990,7 @@ function scaleHandleUnderPointer(
     return undefined
   }
 
-  const bounds = selectionBounds(
-    [
-      ...pointsIn(input.scene, input.selectedIds),
-      ...blueprintPoints(input.images, input.selectedIds),
-    ],
-    input.zoom,
-  )
+  const bounds = input.selectionFrame?.bounds
   if (!bounds) {
     return undefined
   }
@@ -1120,11 +1155,14 @@ type SheetPointerInput = {
   setEnteredGroupId: Dispatch<SetStateAction<string | undefined>>
   setDuplicateDelta: Dispatch<SetStateAction<Point | undefined>>
   setPointEdit: Dispatch<SetStateAction<PointEdit | undefined>>
-  setGesture: Dispatch<SetStateAction<SelectGesture | undefined>>
+  setGesture: (gesture: SelectGesture | undefined) => void
+  setGestureSample?: (gesture: SelectGesture) => void
+  selectionFrame?: SelectionFrame
   setShiftHeld: Dispatch<SetStateAction<boolean>>
   setAltHeld: Dispatch<SetStateAction<boolean>>
   setCommandHeld: Dispatch<SetStateAction<boolean>>
   shapeKind: ShapeKind
+  pen: Layer
 }
 
 type LocatedPointer = {

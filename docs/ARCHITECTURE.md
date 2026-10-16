@@ -27,13 +27,17 @@ SVG and GCode are export formats. They are not the live editor. An SVG DOM gets 
 
 ## Scene
 
-The scene is an ordered list of polylines in document coordinates, as in [CONCEPT.md](CONCEPT.md): millimeters, origin at the bottom-left, Y up. A stroke is a sequence of points plus the stroke color and width from [DESIGN.md](DESIGN.md). Blueprint pictures are a second list on the drawing step, not on that polyline list. They paint under every stroke and are absent from export. Pan and zoom belong to the viewport. They change how the canvas is painted. They do not change the points that will be exported.
+The scene is an ordered list of polylines in document coordinates, as in [CONCEPT.md](CONCEPT.md): millimeters, origin at the bottom-left, Y up. A stroke is a sequence of points plus the stroke color and width from [DESIGN.md](DESIGN.md). Each polyline stores the id of its layer. The layer list — id, name, color, and order — sits on the drawing step with the blueprints. Paint and SVG read the polyline stroke, which a layer recolor or assign writes. The active pen is editor state. Blueprint pictures paint under every stroke and are absent from export. Pan and zoom belong to the viewport. They change how the canvas is painted. They do not change the points that will be exported.
 
 The canvas origin is the top-left and its Y grows down. Scene coordinates stay bottom-left, Y up. `sceneYToTop` in `src/scene/sheet.ts` converts scene Y onto that top-down axis. `src/render/paint-sheet.ts` and SVG export call it. Landscape GCode copies the scene numbers.
 
 React and the canvases both read this scene. They do not keep a second copy of the geometry. Pointer events land on the overlay canvas. React does not receive the drag that creates a point.
 
 Redraw the static canvas when the scene changes. Redraw the overlay when the selection or the in-progress stroke changes. Do not redraw every finished stroke on each pointer move.
+
+A pointer sample is a delta. It does not search the scene and it does not copy points. A move or a rotate draws a picture of the selected strokes when that picture fits the overlay. The picture is pixels, not a second list of points. It is painted again when the selection, the zoom, or the window changes, and when the gesture ends. A scale paints its preview at the stored pen width, at most once a frame. Pan and zoom paint at most once a frame. The scene stays the geometry. The surface stays Canvas 2D.
+
+A selection is a set. A walk of the scene that asks `includes` on the id list is the scan that locked the page when every imported line was selected. Membership tests use the set. A marquee expands each group once. A selection of more than 512 strokes is the rectangle: those strokes stay on the static canvas in their stored color. The limit is `strokedAccentLimit` in `src/ui/overlay-frame.ts`. A smaller selection still leaves the static canvas and is drawn again on the overlay in `#6965db`. Leave the limit in place. Removing it to satisfy that accent for the large case brings the lock back, unless the accent paint itself stays inside one frame.
 
 ## Modules
 
@@ -50,6 +54,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Rotate math | `src/scene/rotate.ts` |
 | Align math | `src/scene/align.ts` |
 | Blueprint place, hit, move, scale, rotate, lock, delete | `src/scene/blueprint.ts` |
+| Layer add, rename, recolor, delete, assign | `src/scene/layer.ts` |
 | SVG parse | `src/scene/import.ts` |
 | SVG and GCode text | `src/scene/export.ts` |
 | Shift lock | `src/scene/ruler.ts` |
@@ -57,6 +62,7 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Rectangle and ellipse points | `src/scene/shape.ts` |
 | Sheet size, fit, scene Y | `src/scene/sheet.ts` |
 | Pixels | `src/render/paint-sheet.ts` |
+| Selection picture fit | `src/render/selection-picture.ts` |
 | Scene state and canvas hooks | `src/ui/App.tsx` |
 | Pointer gestures | `src/ui/sheet-pointer.ts` |
 | Draft stroke, selection preview, marquee, and handles | `src/ui/overlay-frame.ts` |
@@ -65,6 +71,6 @@ Vitest covers `src/scene/` and those pure ui modules. Files are named `src/**/*.
 | Toolbar and menu | `src/ui/islands.tsx` |
 | Import, export, SVG drop, and blueprint drop | `src/ui/files.ts` |
 
-A scene change is a call to the commit in `src/ui/history.ts`. That module keeps the past snapshots and decides whether the drawing changed. The drawing step holds the polyline scene and the blueprint list. The scene modules stay the math for each edit. A new scene change uses that commit and does not add its own undo path.
+A scene change is a call to the commit in `src/ui/history.ts`. That module keeps the past snapshots and decides whether the drawing changed. The drawing step holds the polyline scene, the blueprint list, and the layer list. The scene modules stay the math for each edit. A new scene change uses that commit and does not add its own undo path.
 
 Zod is allowed. Use it when data crosses a boundary, such as a file being imported. React state is enough to hold the active tool and to pass the scene into the canvases. No state library, router, or CSS framework unless a spec asks for one. Another library is added only when the user asks for it.

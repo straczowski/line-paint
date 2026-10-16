@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { placeBlueprint } from '../scene/blueprint'
 import type { Blueprint } from '../scene/blueprint'
 import { polylinesFromSvg } from '../scene/import'
+import type { Layer } from '../scene/layer'
 import type { ImportedPolyline } from '../scene/import'
 import type { Point, Polyline } from '../scene/polyline'
 import { canvasPointToScene } from '../scene/sheet'
@@ -230,6 +231,7 @@ export function downloadTextFile(
 export function appendImportedPolylines(
   scene: readonly Polyline[],
   imported: readonly ImportedPolyline[],
+  layer: Layer,
 ): readonly Polyline[] {
   if (imported.length === 0) {
     return scene
@@ -239,19 +241,20 @@ export function appendImportedPolylines(
   return [
     ...scene,
     ...imported.map((polyline) => ({
-      ...polylineWithNewId(polyline),
+      ...polylineWithNewId(polyline, layer),
       groupIds: [groupId],
     })),
   ]
 }
 
-function polylineWithNewId(polyline: ImportedPolyline): Polyline {
+function polylineWithNewId(polyline: ImportedPolyline, layer: Layer): Polyline {
   return {
     id: crypto.randomUUID(),
     points: polyline.points,
     closed: polyline.closed,
-    stroke: polyline.stroke,
+    stroke: layer.color,
     widthMm: polyline.widthMm,
+    layerId: layer.id,
   }
 }
 

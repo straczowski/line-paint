@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Point, Polyline } from '../scene/polyline'
+import { selectionFrameOf } from '../scene/selection'
 import { hiddenPolylineKey, overlayFrame } from './overlay-frame'
 import type {
   MoveGesture,
@@ -51,13 +52,12 @@ describe('overlayFrame', () => {
       1,
     )
 
-    expect(frame.preview).toEqual([
-      {
-        points: [point(4, 1), point(14, 1)],
-        closed: false,
-        widthMm: 0.3,
-      },
-    ])
+    expect(frame.preview[0]?.points).toBe(scene[0]?.points)
+    expect(frame.gesturePicture).toEqual({
+      kind: 'move',
+      delta: point(4, 1),
+      draw: 'transform',
+    })
     expect(frame.handles).toEqual([
       { point: point(4, 1), selected: true },
       { point: point(14, 1), selected: false },
@@ -126,12 +126,13 @@ describe('overlayFrame', () => {
 
     expect(frame.scaleHandles).toBe(false)
     expect(frame.bounds).toBeUndefined()
-    expect(frame.preview[0]?.closed).toBe(false)
-    expect(frame.preview[0]?.widthMm).toBe(0.3)
-    expect(frame.preview[0]?.points[0]?.x).toBeCloseTo(5)
-    expect(frame.preview[0]?.points[0]?.y).toBeCloseTo(-5)
-    expect(frame.preview[0]?.points[1]?.x).toBeCloseTo(5)
-    expect(frame.preview[0]?.points[1]?.y).toBeCloseTo(5)
+    expect(frame.preview[0]?.points).toBe(scene[0]?.points)
+    expect(frame.gesturePicture).toEqual({
+      kind: 'rotate',
+      center: point(5, 0),
+      angle: Math.PI / 2,
+      draw: 'transform',
+    })
     expect(frame.rotateHandle?.x).toBeCloseTo(-13)
     expect(frame.rotateHandle?.y).toBeCloseTo(0)
     expect(frame.rotatedBounds?.[0]?.x).toBeCloseTo(3)
@@ -168,8 +169,11 @@ describe('overlayFrame', () => {
       1,
     )
 
-    expect(frame.preview[0]?.points[0]?.x).toBeCloseTo(5 - 5 * Math.SQRT1_2)
-    expect(frame.preview[0]?.points[0]?.y).toBeCloseTo(-5 * Math.SQRT1_2)
+    expect(frame.preview[0]?.points).toBe(scene[0]?.points)
+    expect(frame.gesturePicture).toMatchObject({
+      kind: 'rotate',
+      angle: Math.PI / 4,
+    })
   })
 })
 
@@ -201,6 +205,8 @@ describe('hiddenPolylineKey', () => {
       ),
     ).toBe('a')
     expect(hiddenPolylineKey([], undefined, false)).toBe('')
+    const many = Array.from({ length: 513 }, (_, index) => `id-${index}`)
+    expect(hiddenPolylineKey(many, undefined, false)).toBe('')
   })
 })
 
@@ -233,6 +239,24 @@ describe('selection accent', () => {
     ])
     expect(scene[1]?.stroke).toBe('#1e1e1e')
     expect(hiddenPolylineKey(['chosen'], undefined, false)).toBe('chosen')
+  })
+
+  it('leaves a large selection on the static canvas and draws no accent copy', () => {
+    const many = Array.from({ length: 513 }, (_, index) => `id-${index}`)
+    const frame = overlayFrame(
+      scene,
+      [],
+      undefined,
+      many,
+      undefined,
+      undefined,
+      false,
+      false,
+      1,
+      1,
+    )
+
+    expect(frame.preview).toEqual([])
   })
 
   it('does not recolor a polyline the marquee has not selected yet', () => {
@@ -286,14 +310,85 @@ describe('selection accent', () => {
     )
 
     expect(hiddenPolylineKey(['chosen'], gesture, true)).toBe('')
-    expect(frame.preview).toEqual([
-      {
-        points: [point(3, 4), point(13, 4), point(13, 14)],
-        closed: true,
-        widthMm: 0.8,
-      },
-    ])
+    expect(frame.preview[0]?.points).toBe(scene[0]?.points)
+    expect(frame.gesturePicture).toEqual({
+      kind: 'move',
+      delta: point(3, 4),
+      draw: 'transform',
+    })
     expect(scene[0]?.stroke).toBe('#1e1e1e')
+  })
+
+  it('draws a fitting move from the stored rectangle and keeps the point arrays', () => {
+    const gesture: MoveGesture = {
+      kind: 'move',
+      pointerId: 1,
+      startScene: point(0, 0),
+      currentScene: point(3, 4),
+      ids: ['chosen'],
+    }
+    const resting = selectionFrameOf(scene, ['chosen'], 1)
+    const frame = overlayFrame(
+      scene,
+      [],
+      undefined,
+      ['chosen'],
+      gesture,
+      undefined,
+      false,
+      false,
+      1,
+      1,
+      [],
+      undefined,
+      resting,
+      { width: 800, height: 600 },
+    )
+
+    expect(resting).toBeDefined()
+    expect(frame.gesturePicture).toEqual({
+      kind: 'move',
+      delta: point(3, 4),
+      draw: 'picture',
+    })
+    expect(frame.preview).toEqual([])
+    expect(frame.pictureStrokes[0]?.points).toBe(scene[0]?.points)
+    expect(frame.bounds).toEqual({
+      minX: 1,
+      maxX: 15,
+      minY: 2,
+      maxY: 16,
+    })
+  })
+
+  it('strokes a move whose picture would be larger than the overlay', () => {
+    const gesture: MoveGesture = {
+      kind: 'move',
+      pointerId: 1,
+      startScene: point(0, 0),
+      currentScene: point(3, 4),
+      ids: ['chosen'],
+    }
+    const resting = selectionFrameOf(scene, ['chosen'], 1)
+    const frame = overlayFrame(
+      scene,
+      [],
+      undefined,
+      ['chosen'],
+      gesture,
+      undefined,
+      false,
+      false,
+      1,
+      1,
+      [],
+      undefined,
+      resting,
+      { width: 4, height: 4 },
+    )
+
+    expect(frame.gesturePicture?.draw).toBe('transform')
+    expect(frame.preview[0]?.points).toBe(scene[0]?.points)
   })
 
   it('closes the shape preview on the overlay', () => {

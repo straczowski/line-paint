@@ -8,6 +8,7 @@ import {
   groupIdsToRenew,
   groupPolylines,
   nextDuplicateDelta,
+  ungroupChangesScene,
   ungroupPolylines,
 } from '../scene/selection'
 import type { PointDelete } from '../scene/selection'
@@ -58,7 +59,11 @@ export function useSelectBackspace(
 ): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isPlainBackspace(event) || tool !== 'select') {
+      if (
+        !isPlainBackspace(event) ||
+        tool !== 'select' ||
+        backspaceEditsField(event.target)
+      ) {
         return
       }
 
@@ -232,11 +237,21 @@ export function selectionGroupActions(
   return {
     group:
       groupPolylines(scene, { ...change, groupId: offeredGroupId }) !== scene,
-    ungroup: ungroupPolylines(scene, change) !== scene,
+    ungroup: ungroupChangesScene(scene, change),
   }
 }
 
 const offeredGroupId = 'offer'
+
+export function backspaceEditsField(
+  target: EventTarget | { readonly tagName: string } | null,
+): boolean {
+  if (!target || !('tagName' in target)) {
+    return false
+  }
+
+  return target.tagName === 'INPUT'
+}
 
 function isPlainBackspace(event: KeyboardEvent): boolean {
   return (

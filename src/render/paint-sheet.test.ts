@@ -142,6 +142,25 @@ describe('selection paint', () => {
 
     expect(draft.strokes).toEqual(['#1e1e1e'])
 
+    const ink = new RecordingPen()
+    paintOverlay({
+      context: ink,
+      draftPoints: [point(1, 2), point(4, 5)],
+      draftColor: '#e03131',
+      preview: [],
+      bounds: undefined,
+      rotatedBounds: undefined,
+      dashed: false,
+      scaleHandles: false,
+      rotateHandle: undefined,
+      marquee: undefined,
+      handles: [],
+      fit,
+      size,
+    })
+
+    expect(ink.strokes).toEqual(['#e03131'])
+
     const handle = new RecordingPen()
     paintOverlay({
       context: handle,
@@ -172,6 +191,30 @@ describe('selection paint', () => {
 
     expect(original.strokes).toEqual(['#e03131', '#1e1e1e'])
   })
+
+  it('translates a move without baking the delta into the points', () => {
+    const page = new RecordingPen()
+    const points = [point(0, 0), point(10, 0)]
+    paintOverlay({
+      context: page,
+      draftPoints: [],
+      preview: [{ points, closed: false, widthMm: 0.3 }],
+      bounds: undefined,
+      rotatedBounds: undefined,
+      dashed: false,
+      scaleHandles: false,
+      rotateHandle: undefined,
+      marquee: undefined,
+      handles: [],
+      gesturePicture: { kind: 'move', delta: point(4, 1), draw: 'transform' },
+      fit: { scale: 2, left: 0, top: 0 },
+      size,
+    })
+
+    expect(page.moves).toEqual([{ x: 8, y: -2 }])
+    expect(page.lines[0]?.[0]).toEqual(point(0, 420))
+    expect(points).toEqual([point(0, 0), point(10, 0)])
+  })
 })
 
 const fit: SheetFit = { scale: 1, left: 0, top: 0 }
@@ -185,6 +228,7 @@ class RecordingPen {
   lineCap: CanvasLineCap = 'butt'
   lineJoin: CanvasLineJoin = 'miter'
   readonly strokes: string[] = []
+  readonly moves: Point[] = []
   readonly lines: Point[][] = []
   readonly fills: Fill[] = []
   readonly arcs: { x: number; y: number; radius: number }[] = []
@@ -231,7 +275,9 @@ class RecordingPen {
   }
   save(): void {}
   restore(): void {}
-  translate(): void {}
+  translate(x: number, y: number): void {
+    this.moves.push(point(x, y))
+  }
   rotate(): void {}
   drawImage(): void {}
 }

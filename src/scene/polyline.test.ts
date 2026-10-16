@@ -60,6 +60,17 @@ describe('commitPolyline', () => {
     })
   })
 
+  it('stores the layer and its color on a new stroke', () => {
+    const scene = commitPolyline(emptyScene, {
+      id: 'ink',
+      points: [point(0, 0), point(1, 1)],
+      stroke: '#e03131',
+      layerId: 'red',
+    })
+
+    expect(scene[0]).toMatchObject({ stroke: '#e03131', layerId: 'red' })
+  })
+
   it('drops a preview with fewer than two points', () => {
     const scene = commitPolyline(emptyScene, {
       id: 'kept',

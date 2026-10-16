@@ -1,4 +1,5 @@
 import type { Blueprint } from '../scene/blueprint'
+import type { Layer } from '../scene/layer'
 import type { Point, Polyline } from '../scene/polyline'
 import type { Scene } from '../scene/sheet'
 
@@ -8,9 +9,11 @@ export function commitDrawing(
   nextScene: Scene,
   editor?: DrawingEditor,
   nextImages?: readonly Blueprint[],
+  nextLayers?: readonly Layer[],
 ): DrawingCommit {
   const images = nextImages ?? before.images
-  const pastAfter = recordDrawing(past, before, nextScene, images)
+  const layers = nextLayers ?? before.layers
+  const pastAfter = recordDrawing(past, before, nextScene, images, layers)
   const recorded = pastAfter !== past
   if (!recorded && !editor) {
     return { past, step: before, recorded: false }
@@ -21,8 +24,9 @@ export function commitDrawing(
         ...editor,
         scene: recorded ? nextScene : before.scene,
         images: recorded ? images : before.images,
+        layers: recorded ? layers : before.layers,
       }
-    : { ...before, scene: nextScene, images }
+    : { ...before, scene: nextScene, images, layers }
   return { past: pastAfter, step, recorded }
 }
 
@@ -44,10 +48,12 @@ function recordDrawing(
   before: DrawingStep,
   nextScene: Scene,
   nextImages: readonly Blueprint[],
+  nextLayers: readonly Layer[],
 ): readonly DrawingStep[] {
   if (
     sameDrawing(before.scene, nextScene) &&
-    sameImages(before.images, nextImages)
+    sameImages(before.images, nextImages) &&
+    sameLayers(before.layers, nextLayers)
   ) {
     return past
   }
@@ -76,6 +82,9 @@ function samePolyline(current: Polyline, next: Polyline | undefined): boolean {
     return false
   }
   if (current.closed !== next.closed || current.stroke !== next.stroke) {
+    return false
+  }
+  if (current.layerId !== next.layerId) {
     return false
   }
   if (current.widthMm !== next.widthMm) {
@@ -119,6 +128,28 @@ function sameBlueprint(
   )
 }
 
+function sameLayers(
+  current: readonly Layer[],
+  next: readonly Layer[],
+): boolean {
+  if (current === next) {
+    return true
+  }
+  if (current.length !== next.length) {
+    return false
+  }
+
+  return current.every((layer, index) => {
+    const other = next[index]
+    return (
+      other !== undefined &&
+      layer.id === other.id &&
+      layer.name === other.name &&
+      layer.color === other.color
+    )
+  })
+}
+
 function sameGroupIds(
   current: readonly string[] | undefined,
   next: readonly string[] | undefined,
@@ -147,6 +178,7 @@ function samePoints(
 export type DrawingStep = {
   scene: Scene
   images: readonly Blueprint[]
+  layers: readonly Layer[]
   selectedIds: readonly string[]
   enteredGroupId: string | undefined
   pointEdit: PointEdit | undefined
@@ -177,6 +209,7 @@ export type CommitDrawing = (
   nextImages?:
     | readonly Blueprint[]
     | ((images: readonly Blueprint[]) => readonly Blueprint[]),
+  nextLayers?: readonly Layer[],
 ) => void
 
 type PointEdit = {

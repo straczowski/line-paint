@@ -50,8 +50,9 @@ function polylineFromDraft(draft: PolylineDraft): Polyline {
     id: draft.id,
     points: [...draft.points],
     closed: draft.closed ?? false,
-    stroke: defaultPolylineStroke,
+    stroke: draft.stroke ?? defaultPolylineStroke,
     widthMm: defaultPolylineWidthMm,
+    ...(draft.layerId ? { layerId: draft.layerId } : {}),
   }
 }
 
@@ -61,6 +62,7 @@ export type Polyline = {
   closed: boolean
   stroke: string
   widthMm: number
+  layerId?: string
   groupIds?: readonly string[]
 }
 
@@ -68,6 +70,8 @@ export type PolylineDraft = {
   id: string
   points: readonly Point[]
   closed?: boolean
+  stroke?: string
+  layerId?: string
 }
 
 export type PolylineClosed = {

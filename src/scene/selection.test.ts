@@ -413,6 +413,7 @@ describe('duplicatePolylines', () => {
         ...stroke('source', [point(1, 2), point(3, 4)], true),
         stroke: '#e03131',
         widthMm: 0.5,
+        layerId: 'red',
       },
       stroke('stay', [point(8, 9), point(10, 11)]),
     ]
@@ -431,6 +432,7 @@ describe('duplicatePolylines', () => {
       closed: true,
       stroke: '#e03131',
       widthMm: 0.5,
+      layerId: 'red',
     })
     expect(next[2]?.points).not.toBe(scene[0]?.points)
     expect(next[2]?.points[0]).not.toBe(scene[0]?.points[0])
@@ -715,6 +717,18 @@ describe('groups', () => {
       'a',
     ])
     expect(selectionAfterMarquee(scene, ['a'], 'outer')).toEqual(['a'])
+
+    const crowd = Array.from({ length: 4000 }, (_, index) =>
+      stroke(`line-${index}`, [point(index, 0), point(index, 1)]),
+    )
+    const imported = groupPolylines(crowd, {
+      ids: crowd.map((polyline) => polyline.id),
+      groupId: 'imported',
+      enteredGroupId: undefined,
+    })
+    expect(
+      selectionAfterMarquee(imported, ['line-10'], undefined),
+    ).toHaveLength(4000)
     expect(selectionAfterClick(scene, ['c'], 'a', undefined, true).ids).toEqual(
       ['c', 'a', 'b'],
     )
@@ -770,6 +784,22 @@ describe('groups', () => {
     expect(entered.ids).toEqual(['a', 'b'])
     expect(entered.editPoints).toBe(false)
   })
+})
+
+it('keeps a large imported group as one group', () => {
+  const scene = Array.from({ length: 4000 }, (_, index) => ({
+    ...stroke(`line-${index}`, [point(index, 0), point(index, 1)]),
+    groupIds: ['imported'],
+  }))
+  const ids = scene.map((polyline) => polyline.id)
+
+  expect(
+    groupPolylines(scene, {
+      ids,
+      groupId: 'offer',
+      enteredGroupId: undefined,
+    }),
+  ).toBe(scene)
 })
 
 function stroke(
